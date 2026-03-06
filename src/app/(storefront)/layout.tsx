@@ -33,6 +33,9 @@ export default function StorefrontLayout({
             <Link href="/cart" className="text-sm text-zinc-300 hover:text-fidelis-gold transition-colors">
               Cart
             </Link>
+            <Link href="/admin" className="text-sm text-zinc-500 hover:text-fidelis-gold transition-colors" title="Admin sign in">
+              Admin
+            </Link>
           </nav>
         </div>
       </header>
