@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { auth, signOut } from "@/auth";
 import { Button } from "@/components/ui/button";
 import { redirect } from "next/navigation";
@@ -17,9 +18,16 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = (await headers()).get("x-pathname") ?? "";
+  const isLoginPage = pathname === "/admin/login";
+
+  if (isLoginPage) {
+    return <div className="min-h-screen bg-black text-cream">{children}</div>;
+  }
+
   const session = await auth();
   const isAdmin = session?.user?.role === "ADMIN" || session?.user?.role === "STAFF";
-  if (!session?.user) redirect("/admin/login");
+  if (!session?.user) redirect(`/admin/login?callbackUrl=${encodeURIComponent(pathname)}`);
   if (!isAdmin) redirect("/");
 
   return (
