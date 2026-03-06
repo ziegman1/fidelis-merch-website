@@ -91,7 +91,7 @@ export function FulfillmentAddressForm() {
             <Label htmlFor="fa-name" className="text-cream">Name / Business</Label>
             <Input
               id="fa-name"
-              value={address.name}
+              value={address.name ?? ""}
               onChange={(e) => setAddress((a) => ({ ...a, name: e.target.value }))}
               className="bg-zinc-800 border-zinc-600"
             />
@@ -100,7 +100,7 @@ export function FulfillmentAddressForm() {
             <Label htmlFor="fa-line1" className="text-cream">Address line 1</Label>
             <Input
               id="fa-line1"
-              value={address.line1}
+              value={address.line1 ?? ""}
               onChange={(e) => setAddress((a) => ({ ...a, line1: e.target.value }))}
               className="bg-zinc-800 border-zinc-600"
             />
@@ -109,7 +109,7 @@ export function FulfillmentAddressForm() {
             <Label htmlFor="fa-line2" className="text-cream">Address line 2</Label>
             <Input
               id="fa-line2"
-              value={address.line2}
+              value={address.line2 ?? ""}
               onChange={(e) => setAddress((a) => ({ ...a, line2: e.target.value }))}
               className="bg-zinc-800 border-zinc-600"
               placeholder="Apt, suite, etc."
@@ -120,7 +120,7 @@ export function FulfillmentAddressForm() {
               <Label htmlFor="fa-city" className="text-cream">City</Label>
               <Input
                 id="fa-city"
-                value={address.city}
+                value={address.city ?? ""}
                 onChange={(e) => setAddress((a) => ({ ...a, city: e.target.value }))}
                 className="bg-zinc-800 border-zinc-600"
               />
@@ -129,7 +129,7 @@ export function FulfillmentAddressForm() {
               <Label htmlFor="fa-state" className="text-cream">State / Province</Label>
               <Input
                 id="fa-state"
-                value={address.state}
+                value={address.state ?? ""}
                 onChange={(e) => setAddress((a) => ({ ...a, state: e.target.value }))}
                 className="bg-zinc-800 border-zinc-600"
               />
@@ -140,7 +140,7 @@ export function FulfillmentAddressForm() {
               <Label htmlFor="fa-postalCode" className="text-cream">Postal code</Label>
               <Input
                 id="fa-postalCode"
-                value={address.postalCode}
+                value={address.postalCode ?? ""}
                 onChange={(e) => setAddress((a) => ({ ...a, postalCode: e.target.value }))}
                 className="bg-zinc-800 border-zinc-600"
               />
@@ -149,7 +149,7 @@ export function FulfillmentAddressForm() {
               <Label htmlFor="fa-country" className="text-cream">Country</Label>
               <Input
                 id="fa-country"
-                value={address.country}
+                value={address.country ?? ""}
                 onChange={(e) => setAddress((a) => ({ ...a, country: e.target.value }))}
                 className="bg-zinc-800 border-zinc-600"
                 placeholder="US"
