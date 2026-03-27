@@ -6,6 +6,8 @@ import { redirect } from "next/navigation";
 
 const adminNav = [
   { href: "/admin", label: "Dashboard" },
+  { href: "/admin/stats", label: "Stats" },
+  { href: "/admin/site-copy", label: "Site copy" },
   { href: "/admin/products", label: "Products" },
   { href: "/admin/orders", label: "Orders" },
   { href: "/admin/shipping", label: "Shipping" },
@@ -22,7 +24,11 @@ export default async function AdminLayout({
   const isLoginPage = pathname === "/admin/login";
 
   if (isLoginPage) {
-    return <div className="min-h-screen bg-black text-cream">{children}</div>;
+    return (
+      <div className="dark min-h-screen bg-black text-cream [&_input]:text-cream [&_input]:placeholder:text-zinc-400 [&_select]:text-cream [&_textarea]:text-cream">
+        {children}
+      </div>
+    );
   }
 
   const session = await auth();
@@ -31,18 +37,18 @@ export default async function AdminLayout({
   if (!isAdmin) redirect("/");
 
   return (
-    <div className="min-h-screen bg-black text-cream">
-      <header className="border-b border-fidelis-gold/30 px-6 py-4">
+    <div className="dark min-h-screen bg-black text-cream">
+      <header className="border-b border-brand-primary/35 px-6 py-4">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
-          <Link href="/admin" className="font-serif text-xl text-fidelis-gold tracking-wide">
-            Fidelis Admin
+          <Link href="/admin" className="font-serif text-xl text-brand-primary tracking-wide">
+            Zieg&apos;s Merch — Admin
           </Link>
           <nav className="flex items-center gap-6">
             {adminNav.map(({ href, label }) => (
               <Link
                 key={href}
                 href={href}
-                className="text-sm text-zinc-300 hover:text-fidelis-gold transition-colors"
+                className="text-sm text-zinc-300 hover:text-brand-accent transition-colors"
               >
                 {label}
               </Link>
@@ -53,17 +59,19 @@ export default async function AdminLayout({
             <form
               action={async () => {
                 "use server";
-                await signOut();
+                await signOut({ redirectTo: "/" });
               }}
             >
-              <Button type="submit" variant="outline" size="sm" className="border-fidelis-gold/50 text-fidelis-gold">
+              <Button type="submit" variant="outline" size="sm" className="border-brand-primary/50 text-brand-primary">
                 Sign out
               </Button>
             </form>
           </nav>
         </div>
       </header>
-      <main className="max-w-7xl mx-auto px-6 py-8">{children}</main>
+      <main className="max-w-7xl mx-auto px-6 py-8 [&_input]:text-cream [&_input]:placeholder:text-zinc-400 [&_select]:text-cream [&_textarea]:text-cream [&_button[data-variant=outline]]:text-cream">
+        {children}
+      </main>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createOrderFromSession } from "@/lib/orders";
+import { ClearCartOnSuccess } from "./clear-cart-on-success";
 
 export const dynamic = "force-dynamic";
 import { Button } from "@/components/ui/button";
@@ -23,19 +24,20 @@ export default async function OrderSuccessPage({
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-16 text-center">
-      <h1 className="font-serif text-3xl text-fidelis-gold tracking-wide mb-4">
+      <ClearCartOnSuccess />
+      <h1 className="font-serif text-3xl text-brand-primary tracking-wide mb-4">
         Thank you for your order
       </h1>
-      <p className="text-zinc-400 mb-2">
-        Order confirmation has been sent to <strong className="text-cream">{order?.email}</strong>.
+      <p className="text-brand-ink/75 mb-2">
+        Order confirmation has been sent to <strong className="text-brand-ink">{order?.email}</strong>.
       </p>
       {order && (
-        <p className="text-sm text-zinc-500 mb-8">
+        <p className="text-sm text-brand-ink/60 mb-8">
           Order ID: <span className="font-mono">{order.id}</span>
         </p>
       )}
-      <Button asChild className="bg-fidelis-gold text-black hover:bg-fidelis-gold/90">
-        <Link href="/shop">Continue shopping</Link>
+      <Button asChild className="bg-brand-accent text-brand-ink hover:bg-brand-accent/90">
+        <Link href="/merch">Continue shopping</Link>
       </Button>
     </div>
   );

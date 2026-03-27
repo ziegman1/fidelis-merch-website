@@ -29,7 +29,7 @@ export default async function AdminOrdersPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="font-serif text-3xl text-fidelis-gold tracking-wide">Orders</h1>
+      <h1 className="font-serif text-3xl text-brand-primary tracking-wide">Orders</h1>
       <div className="rounded-md border border-zinc-700">
         <Table>
           <TableHeader>
@@ -54,7 +54,7 @@ export default async function AdminOrdersPage() {
                 <TableRow key={o.id} className="border-zinc-700 hover:bg-zinc-800/50">
                   <TableCell className="font-mono text-sm text-cream">{o.id.slice(0, 8)}…</TableCell>
                   <TableCell className="text-zinc-400">{o.email}</TableCell>
-                  <TableCell className="text-fidelis-gold">${(o.totalCents / 100).toFixed(2)}</TableCell>
+                  <TableCell className="text-brand-accent font-medium">${(o.totalCents / 100).toFixed(2)}</TableCell>
                   <TableCell>
                     <Badge variant={statusVariant[o.status] ?? "outline"} className="border-zinc-500">
                       {o.status}
@@ -64,7 +64,7 @@ export default async function AdminOrdersPage() {
                     {new Date(o.createdAt).toLocaleDateString()}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Link href={`/admin/orders/${o.id}`} className="text-sm text-fidelis-gold hover:underline">
+                    <Link href={`/admin/orders/${o.id}`} className="text-sm text-brand-primary hover:underline">
                       View
                     </Link>
                   </TableCell>

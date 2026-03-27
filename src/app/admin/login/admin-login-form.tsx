@@ -42,10 +42,10 @@ export function AdminLoginForm() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-black px-4">
-      <Card className="w-full max-w-md border-fidelis-gold/30 bg-zinc-900 text-cream">
+      <Card className="w-full max-w-md border-brand-primary/35 bg-zinc-900 text-cream">
         <CardHeader>
-          <CardTitle className="font-serif text-2xl text-fidelis-gold">Admin Sign In</CardTitle>
-          <CardDescription>Fidelis Merch — Admin area</CardDescription>
+          <CardTitle className="font-serif text-2xl text-brand-primary">Admin Sign In</CardTitle>
+          <CardDescription>Zieg&apos;s on a Mission Merch — Admin</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4">
@@ -75,7 +75,7 @@ export function AdminLoginForm() {
                 className="bg-zinc-800 border-zinc-600"
               />
             </div>
-            <Button type="submit" className="w-full bg-fidelis-gold text-black hover:bg-fidelis-gold/90" disabled={loading}>
+            <Button type="submit" className="w-full bg-brand-accent text-brand-ink hover:bg-brand-accent/90" disabled={loading}>
               {loading ? "Signing in…" : "Sign in"}
             </Button>
           </form>

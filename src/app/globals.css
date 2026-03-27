@@ -45,18 +45,25 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
-  /* Fidelis brand */
-  --color-fidelis-gold: var(--fidelis-gold);
+  /* Zieg's on a Mission — brand tokens */
+  --color-brand-primary: var(--brand-primary);
+  --color-brand-surface: var(--brand-surface);
+  --color-brand-accent: var(--brand-accent);
+  --color-brand-ink: var(--brand-ink);
+  --color-fidelis-gold: var(--brand-primary);
   --color-fidelis-red: var(--fidelis-red);
   --color-cream: var(--cream);
 }
 
 :root {
   --radius: 0.625rem;
-  /* Fidelis brand (docs/branding.md) */
-  --fidelis-gold: #B89649;
+  --brand-primary: #83b0da;
+  --brand-surface: #eae5e1;
+  --brand-accent: #edb73e;
+  --brand-ink: #1e3644;
+  --fidelis-gold: #83b0da;
   --fidelis-red: #8B2F31;
-  --cream: #F5F0E6;
+  --cream: #eae5e1;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);

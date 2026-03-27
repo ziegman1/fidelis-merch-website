@@ -12,27 +12,31 @@ export default async function AdminOrderDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [order, defaultAddress] = await Promise.all([
-    prisma.order.findUnique({
-      where: { id },
-      include: {
-        items: { include: { variant: { include: { product: true } } } },
-        fulfillments: { include: { provider: true, items: true } },
-      },
-    }),
-    prisma.defaultFulfillmentAddress.findFirst(),
-  ]);
+  const order = await prisma.order.findUnique({
+    where: { id },
+    include: {
+      items: { include: { variant: { include: { product: true } } } },
+      fulfillments: { include: { provider: true, items: true } },
+    },
+  });
   if (!order) notFound();
+
+  let defaultAddress = null;
+  try {
+    defaultAddress = await prisma.defaultFulfillmentAddress.findFirst();
+  } catch {
+    // DefaultFulfillmentAddress table may not exist yet if migration not applied
+  }
 
   const isInternational = (order.shippingCountry ?? "").toUpperCase() !== "US";
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="font-serif text-3xl text-fidelis-gold tracking-wide">
+        <h1 className="font-serif text-3xl text-brand-primary tracking-wide">
           Order {order.id.slice(0, 8)}…
         </h1>
-        <Button asChild variant="outline" size="sm" className="border-fidelis-gold/50">
+        <Button asChild variant="outline" size="sm" className="border-brand-primary/50">
           <Link href="/admin/orders">Back to orders</Link>
         </Button>
       </div>
@@ -67,12 +71,12 @@ export default async function AdminOrderDetailPage({
       )}
 
       {isInternational && (
-        <div className="rounded-md border border-fidelis-gold/30 bg-zinc-900 p-4 space-y-4">
+        <div className="rounded-md border border-brand-primary/35 bg-zinc-900 p-4 space-y-4">
           <p className="text-sm text-zinc-400">
             Printify does not ship internationally. Printify was sent your default address so the item ships to you; use the customer address below when you forward the package.
           </p>
           <div>
-            <h2 className="font-medium text-fidelis-gold mb-1">Printify ships to (your default address)</h2>
+            <h2 className="font-medium text-brand-primary mb-1">Printify ships to (your default address)</h2>
             {defaultAddress ? (
               <address className="text-sm text-cream not-italic">
                 {defaultAddress.name && <span className="block">{defaultAddress.name}</span>}
@@ -90,7 +94,7 @@ export default async function AdminOrderDetailPage({
             )}
           </div>
           <div>
-            <h2 className="font-medium text-fidelis-gold mb-1">Ship to customer (for your records — use when you forward)</h2>
+            <h2 className="font-medium text-brand-primary mb-1">Ship to customer (for your records — use when you forward)</h2>
             <address className="text-sm text-cream not-italic">
               {order.shippingName && <span className="block">{order.shippingName}</span>}
               {order.shippingLine1 && <span className="block">{order.shippingLine1}</span>}

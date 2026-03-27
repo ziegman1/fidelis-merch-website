@@ -78,7 +78,7 @@ export function FulfillmentAddressForm() {
   if (loading) return <p className="text-zinc-500">Loading…</p>;
 
   return (
-    <Card className="border-fidelis-gold/20 bg-zinc-900 max-w-xl">
+    <Card className="border-brand-primary/25 bg-zinc-900 max-w-xl">
       <CardHeader>
         <CardTitle className="text-cream">Default fulfillment address</CardTitle>
         <CardDescription>
@@ -161,7 +161,7 @@ export function FulfillmentAddressForm() {
               {message}
             </p>
           )}
-          <Button type="submit" className="bg-fidelis-gold text-black hover:bg-fidelis-gold/90" disabled={saving}>
+          <Button type="submit" className="bg-brand-accent text-brand-ink hover:bg-brand-accent/90" disabled={saving}>
             {saving ? "Saving…" : "Save address"}
           </Button>
         </form>

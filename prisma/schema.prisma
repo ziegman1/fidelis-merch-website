@@ -45,6 +45,12 @@ enum ProviderType {
   GENERIC
 }
 
+enum ProductStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
 model User {
   id            String    @id @default(cuid())
   email         String?   @unique
@@ -111,10 +117,26 @@ model Product {
   title            String
   slug             String          @unique
   description      String?
+  shortDescription String?
   fulfillmentType  FulfillmentType
   providerId       String?
-  published        Boolean         @default(false)
+  published        Boolean         @default(false) // legacy; prefer status
+  status           ProductStatus   @default(DRAFT)
+  publishedAt      DateTime?
+  featuredImage    String?
   featured         Boolean         @default(false)
+  /** Color names in thumbnail order: ["Black","Navy","Maroon","Grey"] means thumbnail 0=Black, 1=Navy, etc. */
+  colorOrder       Json?
+  /** ProductImage id to show as primary on storefront; when set, this image is shown first. */
+  primaryImageId   String?
+  /** Tags for filtering/grouping: ["featured", "apparel", "drinkware"]. Featured tag = featured item; apparel/drinkware = category. */
+  tags             Json?           @default("[]")
+  /** Self-fulfilled only: when true, product shows as out of stock on storefront regardless of inventory. */
+  markOutOfStock   Boolean         @default(false)
+  /** When true, product card is faded with "Out of stock" watermark; product page viewable but add-to-cart disabled. */
+  paused           Boolean         @default(false)
+  /** When true, product card is faded with "Coming Soon" watermark; product page viewable but add-to-cart disabled. */
+  comingSoon       Boolean         @default(false)
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   provider         Provider?       @relation(fields: [providerId], references: [id], onDelete: SetNull)
@@ -133,14 +155,18 @@ model ProductCollection {
 }
 
 model ProductVariant {
-  id          String   @id @default(cuid())
-  productId   String
-  sku         String?
-  name        String?  // e.g. "Small / Red"
-  priceCents  Int
+  id           String   @id @default(cuid())
+  productId    String
+  sku          String?
+  name         String?  // e.g. "Small / Red"
+  priceCents   Int
   compareAtCents Int?
-  options     Json?    // e.g. { "Size": "S", "Color": "Red" }
-  sortOrder   Int      @default(0)
+  options      Json?    // e.g. { "Size": "S", "Color": "Red" }
+  sortOrder    Int      @default(0)
+  active       Boolean  @default(true)
+  imageOverride String?
+  /** Printify/dropship only: when false, variant is out of stock at provider. Null = unknown/assume available. */
+  printifyAvailable Boolean?
   product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   inventory   Inventory?
   externalMappings ExternalProductMapping[]
@@ -148,12 +174,13 @@ model ProductVariant {
 }
 
 model ProductImage {
-  id        String   @id @default(cuid())
-  productId String
-  url       String
-  alt       String?
-  sortOrder Int      @default(0)
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  productId  String
+  url        String
+  alt        String?
+  sortOrder  Int      @default(0)
+  variantIds Json?    // Printify variant ids this image applies to
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 }
 
 // ——— Providers (dropship) ———
@@ -227,6 +254,14 @@ model Inventory {
 // ——— Cart (optional; client-side for v1) ———
 // No Cart model for v1; can add later
 
+// ——— Checkout (cart stored server-side to avoid Stripe metadata 500-char limit) ———
+model PendingCheckoutCart {
+  id               String   @id @default(cuid())
+  stripeSessionId  String   @unique
+  cartJson         String   // full cart for order creation after payment
+  createdAt        DateTime @default(now())
+}
+
 // ——— Orders ———
 
 model Order {
@@ -292,4 +327,23 @@ model Shipment {
   trackingNumber String?
   shippedAt      DateTime?
   fulfillment    Fulfillment @relation(fields: [fulfillmentId], references: [id], onDelete: Cascade)
+}
+
+// ——— Analytics (storefront traffic) ———
+model PageView {
+  id        String   @id @default(cuid())
+  path      String   // e.g. /shop, /product/foo
+  referrer  String?  // full referrer URL or null
+  visitorId String?  // hashed identifier for unique visitor count (privacy-safe)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([path])
+}
+
+// ——— Editable storefront copy (admin) ———
+model SiteCopy {
+  id        String   @id @default("default")
+  payload   Json     @default("{}")
+  updatedAt DateTime @updatedAt
 }

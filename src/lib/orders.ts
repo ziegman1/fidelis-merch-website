@@ -2,6 +2,18 @@ import Stripe from "stripe";
 import { prisma } from "@/lib/db";
 import { routeFulfillment } from "@/lib/fulfillment";
 
+/** Cart line stored in Stripe session metadata. Extended fields enable future fulfillment routing by sourceType/fulfillmentType. */
+export type StoredCheckoutCartLine = {
+  productId: string;
+  variantId: string;
+  quantity: number;
+  slug?: string;
+  sourceType?: string;
+  fulfillmentType?: string;
+  sourceProductId?: string | null;
+  sourceVariantId?: string | null;
+};
+
 export async function createOrderFromSession(stripeSessionId: string) {
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   if (!stripeKey) throw new Error("Stripe not configured");
@@ -16,11 +28,19 @@ export async function createOrderFromSession(stripeSessionId: string) {
 
   const existing = await prisma.order.findUnique({
     where: { stripeSessionId },
+    include: { items: { include: { variant: { include: { product: true } } } } },
   });
   if (existing) return existing;
 
-  const cart = session.metadata?.cart ? (JSON.parse(session.metadata.cart as string) as { productId: string; variantId: string; quantity: number }[]) : [];
+  const pending = await prisma.pendingCheckoutCart.findUnique({
+    where: { stripeSessionId },
+  });
+  const cart: StoredCheckoutCartLine[] = pending?.cartJson
+    ? (JSON.parse(pending.cartJson) as StoredCheckoutCartLine[])
+    : [];
   if (cart.length === 0) throw new Error("No cart in session");
+
+  await prisma.pendingCheckoutCart.delete({ where: { stripeSessionId } }).catch(() => {});
 
   const variantIds = cart.map((c) => c.variantId);
   const variants = await prisma.productVariant.findMany({

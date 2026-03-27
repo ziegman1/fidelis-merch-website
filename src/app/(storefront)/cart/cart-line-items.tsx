@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { slugForUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-
-type CartItem = { productId: string; variantId: string; quantity: number };
+import type { CartItem } from "./cart-content";
 
 type VariantInfo = {
   id: string;
@@ -25,8 +25,9 @@ export function CartLineItems({
   const [variants, setVariants] = useState<Record<string, VariantInfo>>({});
   const [loading, setLoading] = useState(true);
 
+  const needsFetch = cart.some((i) => i.priceCents == null);
   useEffect(() => {
-    if (cart.length === 0) {
+    if (!needsFetch || cart.length === 0) {
       setLoading(false);
       return;
     }
@@ -44,14 +45,15 @@ export function CartLineItems({
         setVariants(map);
       })
       .finally(() => setLoading(false));
-  }, [cart.map((c) => c.variantId).join(",")]);
+  }, [needsFetch, cart.map((c) => c.variantId).join(",")]);
 
   useEffect(() => {
     if (!loading && onSubtotalChange) {
       let total = 0;
       cart.forEach((item) => {
-        const v = variants[item.variantId];
-        if (v) total += v.priceCents * item.quantity;
+        const price =
+          item.priceCents ?? variants[item.variantId]?.priceCents ?? 0;
+        total += price * item.quantity;
       });
       onSubtotalChange(total);
     }
@@ -71,39 +73,76 @@ export function CartLineItems({
     );
   }
 
-  if (loading) return <p className="text-zinc-500">Loading…</p>;
+  if (loading && needsFetch) return <p className="text-brand-ink/60">Loading…</p>;
 
-  let totalCents = 0;
+  function priceCentsFor(item: CartItem) {
+    return item.priceCents ?? variants[item.variantId]?.priceCents ?? 0;
+  }
+
+  const totalCents = cart.reduce(
+    (sum, item) => sum + priceCentsFor(item) * item.quantity,
+    0,
+  );
+
   const rows = cart.map((item) => {
-    const v = variants[item.variantId];
-    if (!v) return null;
-    const lineTotal = v.priceCents * item.quantity;
-    totalCents += lineTotal;
+    const priceCents = priceCentsFor(item);
+    const title =
+      item.title ?? variants[item.variantId]?.product?.title ?? "Product";
+    const slug =
+      item.slug ?? variants[item.variantId]?.product?.slug ?? "#";
+    const variantName =
+      item.variantName ?? variants[item.variantId]?.name ?? null;
+    const lineTotal = priceCents * item.quantity;
+    const imageUrl = item.imageUrl ?? null;
     return (
-      <tr key={item.variantId} className="border-b border-zinc-700">
+      <tr key={item.variantId} className="border-b border-brand-primary/20">
         <td className="py-4">
-          <Link href={`/product/${v.product.slug}`} className="text-fidelis-gold hover:underline">
-            {v.product.title}
-          </Link>
-          {v.name && <span className="text-zinc-500 text-sm ml-2">({v.name})</span>}
+          <div className="flex items-center gap-3">
+            {imageUrl && (
+              <img
+                src={imageUrl}
+                alt=""
+                className="w-14 h-14 rounded object-cover bg-brand-surface"
+              />
+            )}
+            <div>
+              <Link
+                href={`/product/${slugForUrl(slug)}`}
+                className="text-brand-primary hover:underline"
+              >
+                {title}
+              </Link>
+              {variantName && (
+                <span className="text-brand-ink/55 text-sm ml-2">
+                  ({variantName})
+                </span>
+              )}
+            </div>
+          </div>
         </td>
-        <td className="py-4 text-zinc-400">${(v.priceCents / 100).toFixed(2)}</td>
+        <td className="py-4 text-brand-accent font-medium">
+          ${(priceCents / 100).toFixed(2)}
+        </td>
         <td className="py-4">
           <input
             type="number"
             min={1}
             value={item.quantity}
-            onChange={(e) => updateQty(item.variantId, parseInt(e.target.value, 10) || 1)}
-            className="w-16 rounded border border-zinc-600 bg-zinc-800 px-2 py-1 text-sm text-cream"
+            onChange={(e) =>
+              updateQty(item.variantId, parseInt(e.target.value, 10) || 1)
+            }
+            className="w-16 rounded border border-brand-primary/35 bg-white px-2 py-1 text-sm text-brand-ink"
           />
         </td>
-        <td className="py-4 text-fidelis-gold">${(lineTotal / 100).toFixed(2)}</td>
+        <td className="py-4 text-brand-accent font-medium">
+          ${(lineTotal / 100).toFixed(2)}
+        </td>
         <td className="py-4">
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="text-zinc-500 hover:text-red-400"
+            className="text-brand-ink/55 hover:text-red-600"
             onClick={() => remove(item.variantId)}
           >
             Remove
@@ -117,7 +156,7 @@ export function CartLineItems({
     <div>
       <table className="w-full">
         <thead>
-          <tr className="text-left text-zinc-500 text-sm border-b border-zinc-700">
+          <tr className="text-left text-brand-ink/60 text-sm border-b border-brand-primary/25">
             <th className="pb-2">Product</th>
             <th className="pb-2">Price</th>
             <th className="pb-2">Qty</th>
@@ -128,7 +167,9 @@ export function CartLineItems({
         <tbody>{rows}</tbody>
       </table>
       <div className="mt-6 text-right">
-        <p className="text-lg text-fidelis-gold">Subtotal: ${(totalCents / 100).toFixed(2)}</p>
+        <p className="text-lg text-brand-accent font-semibold">
+          Subtotal: ${(totalCents / 100).toFixed(2)}
+        </p>
       </div>
     </div>
   );

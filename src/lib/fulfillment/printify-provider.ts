@@ -13,15 +13,15 @@ export class PrintifyProvider implements FulfillmentProvider {
       return { success: false, error: "Printify not configured" };
     }
 
-    const lineItems: { product_id: number; variant_id: number; quantity: number }[] = [];
+    const lineItems: { product_id: string; variant_id: string; quantity: number }[] = [];
     for (const item of input.items) {
       const mapping = await this.getMapping(item.variantId);
       if (!mapping) {
         return { success: false, error: `No Printify mapping for variant ${item.variantId}` };
       }
       lineItems.push({
-        product_id: parseInt(mapping.externalProductId, 10),
-        variant_id: parseInt(mapping.externalVariantId, 10),
+        product_id: String(mapping.externalProductId),
+        variant_id: String(mapping.externalVariantId),
         quantity: item.quantity,
       });
     }
@@ -39,7 +39,7 @@ export class PrintifyProvider implements FulfillmentProvider {
       address_to: {
         first_name: input.shipping.name?.split(" ")[0] ?? "Customer",
         last_name: input.shipping.name?.split(" ").slice(1).join(" ") ?? "",
-        email: "", // required by Printify; we don't have it in shipping
+        email: input.shipping.email ?? "",
         phone: "",
         country: input.shipping.country ?? "US",
         region: input.shipping.state ?? "",
@@ -49,6 +49,23 @@ export class PrintifyProvider implements FulfillmentProvider {
         zip: input.shipping.postalCode ?? "",
       },
     };
+
+    console.log("[Printify] Creating order:", {
+      orderId: input.orderId,
+      shopId,
+      lineItems,
+      url: `${PRINTIFY_API}/shops/${shopId}/orders.json`,
+    });
+
+    // Debug: log payload types before POST
+    console.log("[Printify] Payload types:", {
+      line_items: lineItems.map((li, i) => ({
+        index: i,
+        product_id: `${typeof li.product_id} "${li.product_id}"`,
+        variant_id: `${typeof li.variant_id} "${li.variant_id}"`,
+        quantity: `${typeof li.quantity} ${li.quantity}`,
+      })),
+    });
 
     try {
       const res = await fetch(`${PRINTIFY_API}/shops/${shopId}/orders.json`, {
@@ -61,14 +78,16 @@ export class PrintifyProvider implements FulfillmentProvider {
       });
       const data = await res.json();
       if (!res.ok) {
+        console.error("[Printify] API error:", res.status, data);
         return { success: false, error: data.message ?? res.statusText };
       }
+      console.log("[Printify] Order created successfully:", { externalOrderId: data.id });
       return {
         success: true,
         externalOrderId: String(data.id),
       };
     } catch (e) {
-      console.error("Printify createOrder error:", e);
+      console.error("[Printify] createOrder error:", e);
       return { success: false, error: e instanceof Error ? e.message : "Unknown error" };
     }
   }
