@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createOrderFromSession } from "@/lib/orders";
+import { ClearCartOnSuccess } from "./clear-cart-on-success";
 
 export const dynamic = "force-dynamic";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ export default async function OrderSuccessPage({
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-16 text-center">
+      <ClearCartOnSuccess />
       <h1 className="font-serif text-3xl text-fidelis-gold tracking-wide mb-4">
         Thank you for your order
       </h1>

@@ -15,6 +15,7 @@ export interface CreateOrderInput {
     state: string | null;
     postalCode: string | null;
     country: string | null;
+    email?: string | null;
   };
 }
 
