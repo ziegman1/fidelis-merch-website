@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,15 +18,22 @@ type ProductFormProps = {
     title: string;
     slug: string;
     description: string | null;
+    shortDescription?: string | null;
+    featuredImage?: string | null;
     fulfillmentType: string;
     providerId: string | null;
+    status?: "DRAFT" | "PUBLISHED" | "ARCHIVED";
     published: boolean;
   };
 };
 
 export function ProductForm({ action, providers, collections, initial }: ProductFormProps) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
   async function submit(formData: FormData) {
     await action(formData);
+    startTransition(() => router.refresh());
   }
 
   return (
@@ -61,6 +70,27 @@ export function ProductForm({ action, providers, collections, initial }: Product
               name="description"
               defaultValue={initial?.description ?? ""}
               rows={4}
+              className="bg-zinc-800 border-zinc-600"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="shortDescription">Short description (optional)</Label>
+            <Input
+              id="shortDescription"
+              name="shortDescription"
+              defaultValue={initial?.shortDescription ?? ""}
+              placeholder="Brief summary for listings"
+              className="bg-zinc-800 border-zinc-600"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="featuredImage">Featured image URL (optional)</Label>
+            <Input
+              id="featuredImage"
+              name="featuredImage"
+              type="url"
+              defaultValue={initial?.featuredImage ?? ""}
+              placeholder="https://..."
               className="bg-zinc-800 border-zinc-600"
             />
           </div>
@@ -114,16 +144,26 @@ export function ProductForm({ action, providers, collections, initial }: Product
         </CardContent>
       </Card>
 
-      <div className="flex items-center gap-4">
-        <label className="flex items-center gap-2">
-          <input type="checkbox" name="published" defaultChecked={initial?.published} />
-          <span className="text-cream">Published (visible on storefront)</span>
-        </label>
+      <div className="grid gap-2">
+        <Label>Status</Label>
+        <select
+          name="status"
+          defaultValue={initial?.status ?? (initial?.published ? "PUBLISHED" : "DRAFT")}
+          className="flex h-10 w-full max-w-xs rounded-md border border-zinc-600 bg-zinc-800 px-3 py-2 text-sm text-cream"
+        >
+          <option value="DRAFT">Draft (hidden from storefront)</option>
+          <option value="PUBLISHED">Published (visible on storefront)</option>
+          <option value="ARCHIVED">Archived (hidden)</option>
+        </select>
       </div>
 
       <div className="flex gap-4">
-        <Button type="submit" className="bg-fidelis-gold text-black hover:bg-fidelis-gold/90">
-          {initial ? "Save" : "Create product"}
+        <Button
+          type="submit"
+          className="bg-fidelis-gold text-black hover:bg-fidelis-gold/90"
+          disabled={pending}
+        >
+          {pending ? "Saving…" : initial ? "Save" : "Create product"}
         </Button>
         <Button type="button" variant="outline" className="border-zinc-600" asChild>
           <Link href="/admin/products">Cancel</Link>

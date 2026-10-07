@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 const adminNav = [
   { href: "/admin", label: "Dashboard" },
+  { href: "/admin/stats", label: "Stats" },
   { href: "/admin/products", label: "Products" },
   { href: "/admin/orders", label: "Orders" },
   { href: "/admin/shipping", label: "Shipping" },
@@ -23,7 +24,7 @@ export default async function AdminLayout({
   if (!isAdmin) redirect("/");
 
   return (
-    <div className="min-h-screen bg-black text-cream">
+    <div className="dark min-h-screen bg-black text-cream">
       <header className="border-b border-fidelis-gold/30 px-6 py-4">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           <Link href="/admin" className="font-serif text-xl text-fidelis-gold tracking-wide">
@@ -45,7 +46,7 @@ export default async function AdminLayout({
             <form
               action={async () => {
                 "use server";
-                await signOut();
+                await signOut({ redirectTo: "/" });
               }}
             >
               <Button type="submit" variant="outline" size="sm" className="border-fidelis-gold/50 text-fidelis-gold">
@@ -55,7 +56,9 @@ export default async function AdminLayout({
           </nav>
         </div>
       </header>
-      <main className="max-w-7xl mx-auto px-6 py-8">{children}</main>
+      <main className="max-w-7xl mx-auto px-6 py-8 [&_input]:text-cream [&_input]:placeholder:text-zinc-400 [&_select]:text-cream [&_textarea]:text-cream [&_button[data-variant=outline]]:text-cream">
+        {children}
+      </main>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireAdminPage } from "@/lib/admin-page-auth";
+import { ProductStatusFilter } from "./product-status-filter";
 
 export const dynamic = "force-dynamic";
 import { Button } from "@/components/ui/button";
@@ -14,9 +15,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-export default async function AdminProductsPage() {
+type SearchParams = { status?: string };
+
+export default async function AdminProductsPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
   await requireAdminPage("/admin/products");
+  const { status } = await searchParams;
+  const statusFilter = status === "PUBLISHED" || status === "DRAFT" || status === "ARCHIVED" ? status : undefined;
+
   const products = await prisma.product.findMany({
+    where: statusFilter ? { status: statusFilter } : undefined,
     include: {
       variants: { take: 1 },
       provider: { select: { name: true } },
@@ -28,9 +39,12 @@ export default async function AdminProductsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="font-serif text-3xl text-fidelis-gold tracking-wide">Products</h1>
-        <Button asChild className="bg-fidelis-gold text-black hover:bg-fidelis-gold/90">
-          <Link href="/admin/products/new">Add product</Link>
-        </Button>
+        <div className="flex items-center gap-4">
+          <ProductStatusFilter current={statusFilter} />
+          <Button asChild className="bg-fidelis-gold text-black hover:bg-fidelis-gold/90">
+            <Link href="/admin/products/new">Add product</Link>
+          </Button>
+        </div>
       </div>
       <div className="rounded-md border border-zinc-700">
         <Table>
@@ -63,8 +77,10 @@ export default async function AdminProductsPage() {
                   </TableCell>
                   <TableCell className="text-zinc-400">{p.provider?.name ?? "—"}</TableCell>
                   <TableCell>
-                    {p.published ? (
+                    {p.status === "PUBLISHED" ? (
                       <Badge className="bg-green-900/50 text-green-300">Published</Badge>
+                    ) : p.status === "ARCHIVED" ? (
+                      <Badge variant="outline" className="border-amber-600 text-amber-400">Archived</Badge>
                     ) : (
                       <Badge variant="outline" className="border-zinc-500 text-zinc-400">Draft</Badge>
                     )}

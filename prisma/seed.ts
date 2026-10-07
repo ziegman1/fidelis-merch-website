@@ -50,6 +50,7 @@ async function main() {
       fulfillmentType: "self_fulfilled",
       published: true,
       featured: true,
+      tags: ["featured", "drinkware"],
       variants: {
         create: [
           {
@@ -76,7 +77,7 @@ async function main() {
         ],
       },
     },
-    update: {},
+    update: { tags: ["featured", "drinkware"] },
     include: { variants: true },
   });
 
@@ -99,6 +100,7 @@ async function main() {
       providerId: printify.id,
       published: true,
       featured: true,
+      tags: ["featured", "apparel"],
       variants: {
         create: [
           { sku: "TEE-S-BLK", name: "S Black", priceCents: 2499, options: { Size: "S", Color: "Black" }, sortOrder: 0 },
@@ -112,7 +114,7 @@ async function main() {
         ],
       },
     },
-    update: {},
+    update: { tags: ["featured", "apparel"] },
     include: { variants: true },
   });
 
@@ -122,6 +124,17 @@ async function main() {
       { productId: product2.id, collectionId: apparel.id },
     ],
     skipDuplicates: true,
+  });
+
+  // Add Drinkware collection for backward compatibility
+  await prisma.collection.upsert({
+    where: { slug: "drinkware" },
+    create: {
+      name: "Drinkware",
+      slug: "drinkware",
+      description: "Tumblers, mugs, and more",
+    },
+    update: {},
   });
 
   // Default shipping rates
@@ -141,6 +154,16 @@ async function main() {
     collections: [featured.slug, apparel.slug],
     products: [product1.slug, product2.slug],
   });
+
+  // Sync manual products from src/data/manual-products.ts into DB
+  const { syncManualProductsToDb } = await import("../src/lib/catalog/sync-manual-products");
+  const syncResult = await syncManualProductsToDb();
+  console.log("Manual products sync:", syncResult);
+
+  // Sync Printify products from API into DB (if PRINTIFY_API_TOKEN/PRINTIFY_API_KEY and PRINTIFY_SHOP_ID are set)
+  const { syncPrintifyToDb } = await import("../src/lib/catalog/sync-printify-to-db");
+  const printifyResult = await syncPrintifyToDb();
+  console.log("Printify sync:", printifyResult);
 }
 
 main()

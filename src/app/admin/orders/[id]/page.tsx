@@ -14,17 +14,21 @@ export default async function AdminOrderDetailPage({
 }) {
   await requireAdminPage("/admin/orders");
   const { id } = await params;
-  const [order, defaultAddress] = await Promise.all([
-    prisma.order.findUnique({
-      where: { id },
-      include: {
-        items: { include: { variant: { include: { product: true } } } },
-        fulfillments: { include: { provider: true, items: true } },
-      },
-    }),
-    prisma.defaultFulfillmentAddress.findFirst(),
-  ]);
+  const order = await prisma.order.findUnique({
+    where: { id },
+    include: {
+      items: { include: { variant: { include: { product: true } } } },
+      fulfillments: { include: { provider: true, items: true } },
+    },
+  });
   if (!order) notFound();
+
+  let defaultAddress = null;
+  try {
+    defaultAddress = await prisma.defaultFulfillmentAddress.findFirst();
+  } catch {
+    // DefaultFulfillmentAddress table may not exist yet if migration not applied
+  }
 
   const isInternational = (order.shippingCountry ?? "").toUpperCase() !== "US";
 
