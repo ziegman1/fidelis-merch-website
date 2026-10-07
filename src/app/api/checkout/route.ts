@@ -5,11 +5,18 @@ import { prisma } from "@/lib/db";
 import { buildProductColorMapping } from "@/data/product-image-mapping";
 import { getColorFromVariant } from "@/lib/catalog/get-variant-color";
 import { calculateCartShipping } from "@/lib/shipping/calculate-cart-shipping";
+import {
+  CHECKOUT_LIMITS,
+  SHIPPING_LINE_NAME,
+  isValidLineQuantity,
+  type StoredCheckoutCartLine,
+} from "@/lib/orders";
 
+// Only productId, variantId and quantity are read; every other client field is ignored.
 const cartLineSchema = z.object({
-  productId: z.string(),
-  variantId: z.string(),
-  quantity: z.number().min(1).max(99),
+  productId: z.string().min(1).max(64),
+  variantId: z.string().min(1).max(64),
+  quantity: z.number(),
   slug: z.string().optional(),
   sourceType: z.string().optional(),
   fulfillmentType: z.string().optional(),
@@ -63,50 +70,44 @@ export async function POST(req: Request) {
     if (cart.length === 0) {
       return NextResponse.json({ error: "Cart is empty" }, { status: 400 });
     }
+    if (cart.length > CHECKOUT_LIMITS.maxLines) {
+      return NextResponse.json(
+        { error: `Your cart can contain at most ${CHECKOUT_LIMITS.maxLines} different items.` },
+        { status: 400 }
+      );
+    }
+    if (!cart.every((c) => isValidLineQuantity(c.quantity))) {
+      return NextResponse.json(
+        { error: `Each item quantity must be a whole number from 1 to ${CHECKOUT_LIMITS.maxQuantityPerLine}.` },
+        { status: 400 }
+      );
+    }
+    const totalQuantity = cart.reduce((sum, c) => sum + c.quantity, 0);
+    if (totalQuantity > CHECKOUT_LIMITS.maxTotalQuantity) {
+      return NextResponse.json(
+        { error: `Your cart can contain at most ${CHECKOUT_LIMITS.maxTotalQuantity} items in total.` },
+        { status: 400 }
+      );
+    }
 
     const shippingRegion = parsed.shippingRegion ?? parsed.shippingMode;
     if (!shippingRegion || (shippingRegion !== "US" && shippingRegion !== "INTL")) {
       return NextResponse.json({ error: "Shipping region must be selected." }, { status: 400 });
     }
 
-    const shippingMode = shippingRegion;
     const destination = parsed.destination ?? {
       country: parsed.country ?? "US",
     };
-
-    const shippingResult = await calculateCartShipping(
-      cart.map((c) => ({
-        productId: c.productId,
-        variantId: c.variantId,
-        quantity: c.quantity,
-        sourceProductId: c.sourceProductId,
-        sourceVariantId: c.sourceVariantId,
-        fulfillmentType: c.fulfillmentType,
-      })),
-      destination
-    );
-
-    if (!shippingResult.success) {
-      return NextResponse.json(
-        { error: shippingResult.error ?? "Shipping could not be determined" },
-        { status: 400 }
-      );
-    }
-
-    const shippingCents = shippingResult.amountCents;
-    const country = destination.country;
-
-    const stripeKey = process.env.STRIPE_SECRET_KEY;
-    if (!stripeKey) {
-      return NextResponse.json({ error: "Stripe not configured" }, { status: 500 });
-    }
 
     const variantIds = cart.map((c) => c.variantId);
     const variants = await prisma.productVariant.findMany({
       where: { id: { in: variantIds } },
       include: {
+        inventory: true,
+        externalMappings: { take: 1 },
         product: {
           include: {
+            provider: true,
             images: { orderBy: { sortOrder: "asc" } },
             variants: {
               orderBy: { sortOrder: "asc" },
@@ -118,17 +119,97 @@ export async function POST(req: Request) {
     });
     const variantMap = Object.fromEntries(variants.map((v) => [v.id, v]));
 
-    const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
+    // Every submitted line must pass; one invalid line rejects the whole checkout.
+    const unavailable = (title?: string) =>
+      NextResponse.json(
+        {
+          error: title
+            ? `Sorry, "${title}" is not available for checkout. Please remove it from your cart and try again.`
+            : "One or more items in your cart are no longer available. Please remove them and try again.",
+        },
+        { status: 400 }
+      );
+    const requestedByVariant = new Map<string, number>();
+    for (const item of cart) {
+      requestedByVariant.set(item.variantId, (requestedByVariant.get(item.variantId) ?? 0) + item.quantity);
+    }
+    const validated: { v: (typeof variants)[number]; quantity: number }[] = [];
     for (const item of cart) {
       const v = variantMap[item.variantId];
-      if (!v || v.productId !== item.productId) continue;
-      if (v.product.status !== "PUBLISHED" || !v.active) continue;
-      if (v.product.fulfillmentType === "dropship" && v.printifyAvailable === false) {
-        return NextResponse.json(
-          { error: `Sorry, "${v.product.title}" (${v.name ?? "selected variant"}) is currently out of stock. Please remove it from your cart or choose a different variant.` },
-          { status: 400 }
-        );
+      if (!v || v.productId !== item.productId) return unavailable();
+      const product = v.product;
+      if (product.status !== "PUBLISHED" || product.paused || product.comingSoon || !v.active) {
+        return unavailable(product.title);
       }
+      if (!(Number.isInteger(v.priceCents) && v.priceCents > 0)) return unavailable(product.title);
+      if (product.fulfillmentType === "dropship") {
+        if (v.printifyAvailable === false) {
+          return NextResponse.json(
+            { error: `Sorry, "${product.title}" (${v.name ?? "selected variant"}) is currently out of stock. Please remove it from your cart or choose a different variant.` },
+            { status: 400 }
+          );
+        }
+        const mapping = v.externalMappings[0];
+        if (
+          !mapping ||
+          mapping.productId !== product.id ||
+          !mapping.externalProductId ||
+          !/^[1-9]\d*$/.test(mapping.externalVariantId) ||
+          !product.provider ||
+          !product.provider.isActive
+        ) {
+          return unavailable(product.title);
+        }
+      } else if (product.fulfillmentType === "self_fulfilled") {
+        const requested = requestedByVariant.get(v.id) ?? item.quantity;
+        if (product.markOutOfStock || !v.inventory || v.inventory.quantity < requested) {
+          return NextResponse.json(
+            { error: `Sorry, "${product.title}" (${v.name ?? "selected variant"}) does not have enough stock. Please reduce the quantity or remove it from your cart.` },
+            { status: 400 }
+          );
+        }
+      } else {
+        return unavailable(product.title);
+      }
+      validated.push({ v, quantity: item.quantity });
+    }
+
+    const shippingResult = await calculateCartShipping(
+      validated.map(({ v, quantity }) => ({
+        productId: v.productId,
+        variantId: v.id,
+        quantity,
+        fulfillmentType: v.product.fulfillmentType,
+      })),
+      destination
+    );
+
+    if (!shippingResult.success) {
+      return NextResponse.json(
+        { error: shippingResult.error ?? "Shipping could not be determined" },
+        { status: 400 }
+      );
+    }
+    const shippedQuantity = shippingResult.breakdown.reduce((sum, b) => sum + b.items, 0);
+    if (shippedQuantity !== totalQuantity) {
+      console.error("[Checkout] Shipping quote did not cover every validated line", {
+        expectedUnits: totalQuantity,
+        quotedUnits: shippedQuantity,
+      });
+      return NextResponse.json({ error: "Shipping could not be determined for every item in your cart." }, { status: 400 });
+    }
+
+    const shippingCents = shippingResult.amountCents;
+    const country = destination.country;
+
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    if (!stripeKey) {
+      return NextResponse.json({ error: "Stripe not configured" }, { status: 500 });
+    }
+
+    const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
+    const storedCart: StoredCheckoutCartLine[] = [];
+    for (const { v, quantity } of validated) {
       const product = v.product;
       const slug = product.slug;
 
@@ -190,7 +271,18 @@ export async function POST(req: Request) {
           },
           unit_amount: v.priceCents,
         },
-        quantity: item.quantity,
+        quantity,
+      });
+      const mapping = v.externalMappings[0];
+      storedCart.push({
+        productId: v.productId,
+        variantId: v.id,
+        quantity,
+        unitPriceCents: v.priceCents,
+        slug: product.slug,
+        fulfillmentType: product.fulfillmentType,
+        sourceProductId: mapping?.externalProductId ?? null,
+        sourceVariantId: mapping?.externalVariantId ?? null,
       });
     }
 
@@ -203,7 +295,7 @@ export async function POST(req: Request) {
         price_data: {
           currency: "usd",
           product_data: {
-            name: "Shipping",
+            name: SHIPPING_LINE_NAME,
             description: country === "US" ? "Standard (US)" : "International",
           },
           unit_amount: shippingCents,
@@ -231,8 +323,8 @@ export async function POST(req: Request) {
 
     await prisma.pendingCheckoutCart.upsert({
       where: { stripeSessionId: session.id },
-      create: { stripeSessionId: session.id, cartJson: JSON.stringify(cart) },
-      update: { cartJson: JSON.stringify(cart) },
+      create: { stripeSessionId: session.id, cartJson: JSON.stringify(storedCart) },
+      update: { cartJson: JSON.stringify(storedCart) },
     });
 
     return NextResponse.json({ url: session.url });
