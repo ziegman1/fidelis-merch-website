@@ -8,6 +8,7 @@ import {
   getPrintifyToken,
   getPrintifyShopId,
 } from "@/lib/printify/api";
+import { isPrintifyReadAllowed } from "@/lib/env-safety";
 
 const PRINTIFY_API_BASE = "https://api.printify.com/v1";
 
@@ -60,6 +61,10 @@ export async function calculatePrintifyShipping(
 
   if (lineItems.length === 0) {
     return { success: false, error: "No line items" };
+  }
+
+  if (!isPrintifyReadAllowed()) {
+    return { success: false, error: "Printify shipping quotes are disabled in this environment" };
   }
 
   const body = {

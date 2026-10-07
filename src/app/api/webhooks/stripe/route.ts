@@ -6,14 +6,10 @@
 
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
-import { Resend } from "resend";
 import { createOrderFromSession } from "@/lib/orders";
 import { LEGAL_CONFIG } from "@/data/legal-config";
-
-function getResend() {
-  const key = process.env.RESEND_API_KEY;
-  return key ? new Resend(key) : null;
-}
+import { getTransactionalEmailSender } from "@/lib/email";
+import { isStripeSecretKeyAllowed } from "@/lib/env-safety";
 
 function escapeHtml(s: string): string {
   return s
@@ -31,6 +27,14 @@ export async function POST(req: Request) {
 
   if (!stripeKey || !webhookSecret) {
     console.error("[Stripe webhook] Missing STRIPE_SECRET_KEY or STRIPE_WEBHOOK_SECRET");
+    return NextResponse.json(
+      { error: "Webhook not configured" },
+      { status: 500 }
+    );
+  }
+
+  if (!isStripeSecretKeyAllowed(stripeKey)) {
+    console.error("[Stripe webhook] STRIPE_SECRET_KEY is not allowed in this environment (live keys are production-only)");
     return NextResponse.json(
       { error: "Webhook not configured" },
       { status: 500 }
@@ -85,13 +89,13 @@ export async function POST(req: Request) {
       const orderId = order.id;
 
       if (customerEmail) {
-        const resend = getResend();
-        if (!resend) {
+        const sendEmail = getTransactionalEmailSender();
+        if (!sendEmail) {
           console.warn("[Email] Skipping order confirmation: RESEND_API_KEY not set");
         } else {
           try {
             console.log("[Email] Sending order confirmation", { orderId, customerEmail });
-            const { data, error } = await resend.emails.send({
+            const { data, error } = await sendEmail({
             from: "Fidelis Merch <orders@fidelismerch.com>",
             to: customerEmail,
             subject: "Your Fidelis Merch Order Confirmation",
@@ -121,8 +125,8 @@ export async function POST(req: Request) {
       }
 
       // Internal notification to jszcs04@gmail.com
-      const resend = getResend();
-      if (resend) {
+      const sendEmail = getTransactionalEmailSender();
+      if (sendEmail) {
         try {
           const hasSelfFulfilled = order.items.some(
             (item) => item.variant.product.fulfillmentType === "self_fulfilled"
@@ -175,7 +179,7 @@ ${order.shippingLine2 ? `<div>${escapeHtml(order.shippingLine2)}</div>` : ""}
 ${shippingLabelHtml}
 <p style="font-size:12px;color:#666;">Admin: <a href="${LEGAL_CONFIG.siteUrl}/admin/orders/${order.id}">View order</a></p>
 `;
-          await resend.emails.send({
+          await sendEmail({
             from: "Fidelis Merch <orders@fidelismerch.com>",
             to: "jszcs04@gmail.com",
             subject: `New order: ${order.id} — $${(order.totalCents / 100).toFixed(2)}`,

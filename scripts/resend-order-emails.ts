@@ -3,21 +3,23 @@
  * Resend order confirmation emails for existing orders.
  * Use when webhook failed (e.g. signature verification) but orders exist in DB.
  *
- * Usage:
- *   npm run resend:emails              # Resend for all PAID orders
- *   npm run resend:emails -- --since=2025-03-01
- *   npm run resend:emails -- --order=<orderId>
- *   npm run resend:emails -- --email=<address>
+ * A selector is required, and nothing is sent without --send (dry run by default):
+ *   npm run resend:emails -- --order=<orderId> [--send]
+ *   npm run resend:emails -- --since=2025-03-01 [--send]
+ *   npm run resend:emails -- --email=<address> [--send]
+ *   npm run resend:emails -- --all [--send]
+ *
+ * Outside production, email is suppressed or rerouted by the guarded sender.
+ * Production (real customers) requires credentials supplied in the shell and:
+ *   FIDELIS_PRODUCTION_OPERATOR=resend-order-emails npm run resend:emails -- --production --order=<id> --send
  */
 
-import { config } from "dotenv";
-import { resolve } from "path";
-import { Resend } from "resend";
-import { prisma } from "../src/lib/db";
+import type { PrismaClient } from "@prisma/client";
 import { LEGAL_CONFIG } from "../src/data/legal-config";
+import { getTransactionalEmailSender } from "../src/lib/email";
+import { prepareScriptEnvironment } from "./lib/script-env";
 
-config({ path: resolve(process.cwd(), ".env") });
-config({ path: resolve(process.cwd(), ".env.local") });
+prepareScriptEnvironment("resend-order-emails", { allowProductionOperator: true });
 
 function escapeHtml(s: string): string {
   return s
@@ -44,15 +46,15 @@ async function sendOrderEmails(order: {
     variant: { product: { title: string; fulfillmentType: string }; name: string | null };
   }[];
 }) {
-  const resend = new Resend(process.env.RESEND_API_KEY);
-  if (!resend) {
+  const sendEmail = getTransactionalEmailSender();
+  if (!sendEmail) {
     throw new Error("RESEND_API_KEY not set");
   }
 
   const siteUrl = LEGAL_CONFIG.siteUrl;
 
   // Customer confirmation
-  await resend.emails.send({
+  await sendEmail({
     from: "Fidelis Merch <orders@fidelismerch.com>",
     to: order.email,
     subject: "Your Fidelis Merch Order Confirmation",
@@ -125,7 +127,7 @@ ${shippingLabelHtml}
 <p style="font-size:12px;color:#666;">Admin: <a href="${siteUrl}/admin/orders/${order.id}">View order</a></p>
 `;
 
-  await resend.emails.send({
+  await sendEmail({
     from: "Fidelis Merch <orders@fidelismerch.com>",
     to: "jszcs04@gmail.com",
     subject: `[Resent] New order: ${order.id} — $${(order.totalCents / 100).toFixed(2)}`,
@@ -143,7 +145,15 @@ async function main() {
   const sinceArg = args.find((a) => a.startsWith("--since="));
   const orderArg = args.find((a) => a.startsWith("--order="));
   const emailArg = args.find((a) => a.startsWith("--email="));
+  const all = args.includes("--all");
+  const send = args.includes("--send");
 
+  if (!orderArg && !sinceArg && !emailArg && !all) {
+    console.error("Refusing to select orders implicitly. Pass --order=<id>, --since=<date>, --email=<address>, or --all.");
+    process.exit(1);
+  }
+
+  const { prisma } = await import("../src/lib/db");
   let orders: Awaited<ReturnType<typeof fetchOrders>>;
 
   if (orderArg) {
@@ -160,27 +170,36 @@ async function main() {
   } else {
     const since = sinceArg ? new Date(sinceArg.split("=")[1]!) : null;
     const emailFilter = emailArg ? emailArg.split("=")[1]?.trim().toLowerCase() : null;
-    orders = await fetchOrders(since, emailFilter);
+    orders = await fetchOrders(prisma, since, emailFilter);
   }
 
   if (orders.length === 0) {
     console.log("No orders found.");
-    process.exit(0);
+    await prisma.$disconnect();
+    return;
+  }
+
+  if (!send) {
+    console.log(`Dry run: ${orders.length} order(s) selected. Re-run with --send to email them.`);
+    for (const order of orders) console.log(`  ${order.id}`);
+    await prisma.$disconnect();
+    return;
   }
 
   console.log(`Resending emails for ${orders.length} order(s)...`);
   for (const order of orders) {
     try {
       await sendOrderEmails(order);
-      console.log(`✓ ${order.id} — ${order.email}`);
+      console.log(`✓ ${order.id}`);
     } catch (e) {
       console.error(`✗ ${order.id}:`, e instanceof Error ? e.message : e);
     }
   }
+  await prisma.$disconnect();
   console.log("Done.");
 }
 
-async function fetchOrders(since: Date | null, emailFilter?: string | null) {
+async function fetchOrders(prisma: PrismaClient, since: Date | null, emailFilter?: string | null) {
   return prisma.order.findMany({
     where: {
       status: { in: ["PAID", "FULFILLING", "SHIPPED", "COMPLETE"] },
@@ -194,9 +213,7 @@ async function fetchOrders(since: Date | null, emailFilter?: string | null) {
   });
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

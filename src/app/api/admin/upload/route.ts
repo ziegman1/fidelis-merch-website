@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { auth } from "@/auth";
+import { assertBlobWriteAllowed } from "@/lib/env-safety";
 
 const MAX_SIZE = 4 * 1024 * 1024; // 4 MB (under Vercel body limit)
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
@@ -39,6 +40,16 @@ export async function POST(req: Request) {
 
   const ext = file.name.split(".").pop() || "jpg";
   const pathname = `products/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+  try {
+    assertBlobWriteAllowed();
+  } catch (e) {
+    console.warn("[upload] Blob write blocked:", (e as Error).message);
+    return NextResponse.json(
+      { error: "Uploads are disabled in this environment." },
+      { status: 503 }
+    );
+  }
 
   const token = process.env.BLOB_READ_WRITE_TOKEN;
 

@@ -1,14 +1,14 @@
 /**
- * Sends a sample order notification email with printable shipping label to jszcs04@gmail.com.
+ * Sends a sample order notification email with printable shipping label through
+ * the guarded sender. Non-production only: suppressed by default, or delivered
+ * to the Resend test sink when FIDELIS_EMAIL_SINK=resend-test.
  * Run: npm run test:email:label
  */
 
-import { config } from "dotenv";
-import { resolve } from "path";
-import { Resend } from "resend";
+import { getTransactionalEmailSender } from "../src/lib/email";
+import { prepareScriptEnvironment } from "./lib/script-env";
 
-config({ path: resolve(process.cwd(), ".env") });
-config({ path: resolve(process.cwd(), ".env.local") });
+prepareScriptEnvironment("test-order-email-with-label");
 
 function escapeHtml(s: string): string {
   return s
@@ -19,9 +19,9 @@ function escapeHtml(s: string): string {
 }
 
 async function main() {
-  const key = process.env.RESEND_API_KEY;
-  if (!key) {
-    console.error("RESEND_API_KEY is not set. Add it to .env.local");
+  const sendEmail = getTransactionalEmailSender();
+  if (!sendEmail) {
+    console.error("RESEND_API_KEY is not set.");
     process.exit(1);
   }
 
@@ -77,8 +77,7 @@ ${shippingLabelHtml}
 <p style="font-size:12px;color:#666;">Admin: <a href="${siteUrl}/admin/orders/${orderId}">View order</a></p>
 `;
 
-  const resend = new Resend(key);
-  const { data, error } = await resend.emails.send({
+  const { data, error, suppressed } = await sendEmail({
     from: "Fidelis Merch <orders@fidelismerch.com>",
     to: "jszcs04@gmail.com",
     subject: `Sample order (with printable label): ${orderId} — $${(totalCents / 100).toFixed(2)}`,
@@ -89,7 +88,7 @@ ${shippingLabelHtml}
     console.error("Failed to send sample email:", error);
     process.exit(1);
   }
-  console.log("Sample order email with printable label sent. Check jszcs04@gmail.com inbox.", { resendId: data?.id });
+  console.log(suppressed ? "Sample email suppressed (non-production)." : "Sample email accepted.", { resendId: data?.id });
 }
 
 main();

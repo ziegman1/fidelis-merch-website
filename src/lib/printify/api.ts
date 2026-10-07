@@ -4,6 +4,8 @@
  * Never expose these to the browser.
  */
 
+import { assertPrintifyReadAllowed } from "@/lib/env-safety";
+
 const PRINTIFY_API_BASE = "https://api.printify.com/v1";
 
 export function getPrintifyToken(): string | null {
@@ -61,6 +63,7 @@ interface PrintifyListResponse {
  * Fetch all products from a Printify shop (paginated).
  */
 export async function fetchPrintifyProductList(shopId: string): Promise<PrintifyApiProduct[]> {
+  assertPrintifyReadAllowed();
   const auth = getAuthHeader();
   if (!auth) throw new Error("Printify API token not configured");
 
@@ -104,6 +107,7 @@ export async function fetchPrintifyProduct(
   shopId: string,
   productId: string
 ): Promise<PrintifyApiProduct | null> {
+  assertPrintifyReadAllowed();
   const auth = getAuthHeader();
   if (!auth) throw new Error("Printify API token not configured");
 

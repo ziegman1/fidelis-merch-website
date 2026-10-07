@@ -1,5 +1,6 @@
 import type { FulfillmentProvider, CreateOrderInput, CreateOrderResult } from "./types";
 import type { ExternalProductMapping } from "@prisma/client";
+import { assertPrintifyWriteAllowed } from "@/lib/env-safety";
 
 const PRINTIFY_API = "https://api.printify.com/v1";
 
@@ -11,6 +12,13 @@ export class PrintifyProvider implements FulfillmentProvider {
     const shopId = process.env.PRINTIFY_SHOP_ID;
     if (!apiKey || !shopId) {
       return { success: false, error: "Printify not configured" };
+    }
+
+    try {
+      assertPrintifyWriteAllowed();
+    } catch (e) {
+      console.warn("[Printify] Order creation blocked:", { orderId: input.orderId, reason: (e as Error).message });
+      return { success: false, error: "Printify order creation is disabled outside production" };
     }
 
     const lineItems: { product_id: string; variant_id: string; quantity: number }[] = [];

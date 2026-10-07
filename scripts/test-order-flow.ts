@@ -7,10 +7,18 @@
  *   npm run test:order                    # Validate config and print manual test steps
  *   npm run test:order -- --create         # Create test checkout URL (uses script env)
  *   npm run test:order -- --verify <id>    # Verify order was created and sent to Printify
+ *
+ * Non-production only: refuses production databases and Stripe live keys.
  */
 
 import Stripe from "stripe";
-import { prisma } from "../src/lib/db";
+import type { PrismaClient } from "@prisma/client";
+import { assertStripeSecretKeyAllowed } from "../src/lib/env-safety";
+import { prepareScriptEnvironment } from "./lib/script-env";
+
+prepareScriptEnvironment("test-order-flow");
+
+let prisma: PrismaClient;
 
 const BASE_URL = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
 
@@ -29,10 +37,8 @@ async function validateConfig(): Promise<{ ok: boolean; errors: string[] }> {
 
   // Validate Stripe key format
   const sk = process.env.STRIPE_SECRET_KEY ?? "";
-  if (!sk.startsWith("sk_")) {
-    errors.push("STRIPE_SECRET_KEY should start with sk_");
-  } else if (sk.startsWith("sk_live_") && !process.env.CI) {
-    console.warn("⚠️  Using STRIPE_SECRET_KEY (live). For testing, use sk_test_ keys.");
+  if (!sk.startsWith("sk_test_")) {
+    errors.push("STRIPE_SECRET_KEY must be a test-mode key (sk_test_)");
   }
 
   return { ok: errors.length === 0, errors };
@@ -128,7 +134,7 @@ async function createTestCheckout(): Promise<{ url: string; sessionId: string } 
   ];
 
   try {
-    const stripe = new Stripe(stripeKey);
+    const stripe = new Stripe(assertStripeSecretKeyAllowed(stripeKey));
     const primaryImg = product.primaryImageId
       ? product.images.find((i) => i.id === product.primaryImageId)
       : null;
@@ -225,6 +231,7 @@ async function main() {
   const args = process.argv.slice(2);
   const cmd = args[0];
   const sessionId = args[1];
+  ({ prisma } = await import("../src/lib/db"));
 
   console.log("\n=== Order Flow Test ===\n");
 

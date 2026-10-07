@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import Stripe from "stripe";
 import { prisma } from "@/lib/db";
+import { isStripeSecretKeyAllowed } from "@/lib/env-safety";
 import { buildProductColorMapping } from "@/data/product-image-mapping";
 import { getColorFromVariant } from "@/lib/catalog/get-variant-color";
 import { calculateCartShipping } from "@/lib/shipping/calculate-cart-shipping";
@@ -204,6 +205,10 @@ export async function POST(req: Request) {
 
     const stripeKey = process.env.STRIPE_SECRET_KEY;
     if (!stripeKey) {
+      return NextResponse.json({ error: "Stripe not configured" }, { status: 500 });
+    }
+    if (!isStripeSecretKeyAllowed(stripeKey)) {
+      console.error("[Checkout] STRIPE_SECRET_KEY is not allowed in this environment (live keys are production-only)");
       return NextResponse.json({ error: "Stripe not configured" }, { status: 500 });
     }
 

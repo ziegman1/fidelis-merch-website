@@ -1,4 +1,8 @@
 import { PrismaClient } from "@prisma/client";
+import { prepareScriptEnvironment } from "../scripts/lib/script-env";
+
+// Sample data seed: non-production databases only.
+prepareScriptEnvironment("seed");
 
 const prisma = new PrismaClient();
 

@@ -17,7 +17,7 @@ export default async function AdminProvidersPage() {
       <h1 className="font-serif text-3xl text-fidelis-gold tracking-wide">Providers</h1>
       <p className="text-zinc-400 max-w-2xl">
         Dropship providers (e.g. Printify). Configure API keys in environment variables (PRINTIFY_API_KEY, PRINTIFY_SHOP_ID).
-        For local dev, run <code className="text-xs bg-zinc-800 px-1 rounded">vercel env pull</code> to pull Vercel vars into .env.vercel.
+        Outside production, Printify API calls are disabled unless <code className="text-xs bg-zinc-800 px-1 rounded">FIDELIS_ALLOW_PRINTIFY_READS=true</code>, and orders are never sent to Printify.
       </p>
       <div className="space-y-1">
         <SyncPrintifyButton />

@@ -1,24 +1,23 @@
 /**
- * Sends a test email to jszcs04@gmail.com to verify the order notification setup.
+ * Sends a test order-notification email through the guarded sender.
+ * Non-production only: suppressed by default, or delivered to the Resend test
+ * sink when FIDELIS_EMAIL_SINK=resend-test.
  * Run: npm run test:email
  */
 
-import { config } from "dotenv";
-import { resolve } from "path";
-import { Resend } from "resend";
+import { getTransactionalEmailSender } from "../src/lib/email";
+import { prepareScriptEnvironment } from "./lib/script-env";
 
-config({ path: resolve(process.cwd(), ".env") });
-config({ path: resolve(process.cwd(), ".env.local") });
+prepareScriptEnvironment("test-order-email");
 
 async function main() {
-  const key = process.env.RESEND_API_KEY;
-  if (!key) {
-    console.error("RESEND_API_KEY is not set. Add it to .env.local");
+  const sendEmail = getTransactionalEmailSender();
+  if (!sendEmail) {
+    console.error("RESEND_API_KEY is not set.");
     process.exit(1);
   }
 
-  const resend = new Resend(key);
-  const { data, error } = await resend.emails.send({
+  const { data, error, suppressed } = await sendEmail({
     from: "Fidelis Merch <orders@fidelismerch.com>",
     to: "jszcs04@gmail.com",
     subject: "Test — Order notification setup",
@@ -34,7 +33,7 @@ async function main() {
     console.error("Failed to send test email:", error);
     process.exit(1);
   }
-  console.log("Test email sent successfully. Check jszcs04@gmail.com inbox.", { resendId: data?.id });
+  console.log(suppressed ? "Test email suppressed (non-production)." : "Test email accepted.", { resendId: data?.id });
 }
 
 main();

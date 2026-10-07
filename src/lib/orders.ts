@@ -1,6 +1,7 @@
 import Stripe from "stripe";
 import { prisma } from "@/lib/db";
 import { routeFulfillment } from "@/lib/fulfillment";
+import { assertStripeSecretKeyAllowed } from "@/lib/env-safety";
 
 export const CHECKOUT_LIMITS = {
   maxLines: 20,
@@ -143,7 +144,7 @@ export async function createOrderFromSession(stripeSessionId: string) {
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   if (!stripeKey) throw new Error("Stripe not configured");
 
-  const stripe = new Stripe(stripeKey);
+  const stripe = new Stripe(assertStripeSecretKeyAllowed(stripeKey));
   const session = await stripe.checkout.sessions.retrieve(stripeSessionId);
   if (!session.payment_status || session.payment_status !== "paid") {
     throw new Error("Session not paid");

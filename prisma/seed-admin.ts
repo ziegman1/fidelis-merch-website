@@ -1,5 +1,9 @@
 import { PrismaClient } from "@prisma/client";
 import { hash } from "bcryptjs";
+import { prepareScriptEnvironment } from "../scripts/lib/script-env";
+
+// Production use requires: FIDELIS_PRODUCTION_OPERATOR=seed-admin ... --production
+prepareScriptEnvironment("seed-admin", { allowProductionOperator: true });
 
 const prisma = new PrismaClient();
 
