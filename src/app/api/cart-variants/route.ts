@@ -9,7 +9,11 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { variantIds } = schema.parse(body);
     const variants = await prisma.productVariant.findMany({
-      where: { id: { in: variantIds } },
+      where: {
+        id: { in: variantIds },
+        active: true,
+        product: { status: "PUBLISHED" },
+      },
       include: { product: { select: { id: true, title: true, slug: true } } },
     });
     return NextResponse.json({ variants });

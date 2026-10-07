@@ -1,22 +1,22 @@
 import Link from "next/link";
-import { prisma } from "@/lib/db";
+import { listUnifiedProducts } from "@/lib/catalog";
+import { slugForUrl } from "@/lib/utils";
+import { CATEGORY_SLUGS, CATEGORY_LABELS } from "@/data/product-tags";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
 export const dynamic = "force-dynamic";
 
+const CATEGORY_DESCRIPTIONS: Record<string, string> = {
+  apparel: "T-shirts, hoodies, polos, and more",
+  drinkware: "Tumblers, mugs, and drinkware",
+};
+
 export default async function HomePage() {
-  const [featuredProducts, featuredCollections] = await Promise.all([
-    prisma.product.findMany({
-      where: { published: true, featured: true },
-      include: { images: { take: 1, orderBy: { sortOrder: "asc" } }, variants: { take: 1 } },
-      take: 4,
-    }),
-    prisma.collection.findMany({
-      where: { featured: true },
-      take: 4,
-    }),
-  ]);
+  const featuredProducts = await listUnifiedProducts({ featured: true });
+  const productsWithImages = featuredProducts.filter(
+    (p) => p.images?.length > 0 && p.images[0]?.url?.trim()
+  );
 
   return (
     <div>
@@ -43,54 +43,69 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* Featured collections */}
-      {featuredCollections.length > 0 && (
-        <section className="py-16 px-4 max-w-7xl mx-auto">
-          <h2 className="font-serif text-2xl text-fidelis-gold tracking-wide mb-8">Collections</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {featuredCollections.map((c) => (
-              <Link key={c.id} href={`/shop?collection=${c.slug}`}>
-                <Card className="border-fidelis-gold/20 bg-zinc-900 overflow-hidden hover:border-fidelis-gold/50 transition-colors">
-                  <CardContent className="p-6">
-                    <h3 className="font-medium text-cream">{c.name}</h3>
-                    {c.description && (
-                      <p className="text-sm text-zinc-500 mt-1 line-clamp-2">{c.description}</p>
-                    )}
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
+      {/* Collections — Apparel & Drinkware */}
+      <section className="py-16 px-4 max-w-7xl mx-auto">
+        <h2 className="font-serif text-2xl text-fidelis-gold tracking-wide mb-8">Collections</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          {CATEGORY_SLUGS.map((slug) => (
+            <Link key={slug} href={`/shop?category=${slug}`}>
+              <Card className="border-fidelis-gold/20 bg-zinc-900 overflow-hidden hover:border-fidelis-gold/50 transition-colors h-full">
+                <CardContent className="p-6">
+                  <h3 className="font-medium text-cream">{CATEGORY_LABELS[slug]}</h3>
+                  {CATEGORY_DESCRIPTIONS[slug] && (
+                    <p className="text-sm text-zinc-500 mt-1">{CATEGORY_DESCRIPTIONS[slug]}</p>
+                  )}
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      </section>
 
-      {/* Featured products */}
+      {/* Featured products — links to product detail (description & quantity selection) */}
       <section className="py-16 px-4 max-w-7xl mx-auto">
         <h2 className="font-serif text-2xl text-fidelis-gold tracking-wide mb-8">Featured</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {featuredProducts.map((p) => {
-            const img = p.images[0];
-            const variant = p.variants[0];
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {productsWithImages.map((p) => {
+            const img = p.primaryImageUrl
+              ? { url: p.primaryImageUrl, alt: p.title }
+              : p.images[0];
+            const priceCents = p.basePriceCents ?? p.variants[0]?.priceCents ?? 0;
+            const isPaused = p.paused === true;
+            const isComingSoon = p.comingSoon === true;
+            const isUnavailable = isPaused || isComingSoon;
+            const watermarkText = isComingSoon ? "Coming Soon" : "Out of stock";
             return (
-              <Link key={p.id} href={`/product/${p.slug}`}>
-                <Card className="border-fidelis-gold/20 bg-zinc-900 overflow-hidden hover:border-fidelis-gold/50 transition-colors h-full">
+              <Link
+                key={p.id}
+                href={`/product/${slugForUrl(p.slug)}`}
+                className="block h-full"
+              >
+                <Card className={`border-fidelis-gold/20 bg-zinc-900 overflow-hidden hover:border-fidelis-gold/50 transition-colors h-full ${isUnavailable ? "opacity-60" : ""}`}>
                   <div className="aspect-square bg-zinc-800 relative">
                     {img ? (
                       <img
                         src={img.url}
                         alt={img.alt ?? p.title}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain"
                       />
                     ) : (
                       <span className="absolute inset-0 flex items-center justify-center text-zinc-600 text-sm">
                         No image
                       </span>
                     )}
+                    {isUnavailable && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                        <span className="text-lg font-semibold text-white/90 uppercase tracking-widest rotate-[-12deg] drop-shadow-lg">
+                          {watermarkText}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <CardContent className="p-4">
                     <h3 className="font-medium text-cream">{p.title}</h3>
                     <p className="text-fidelis-gold mt-1">
-                      {variant ? `$${(variant.priceCents / 100).toFixed(2)}` : "—"}
+                      {priceCents > 0 ? `$${(priceCents / 100).toFixed(2)}` : "—"}
                     </p>
                   </CardContent>
                 </Card>
@@ -98,7 +113,7 @@ export default async function HomePage() {
             );
           })}
         </div>
-        {featuredProducts.length === 0 && (
+        {productsWithImages.length === 0 && (
           <p className="text-zinc-500">No featured products yet.</p>
         )}
       </section>
