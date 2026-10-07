@@ -1,7 +1,9 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FulfillmentAddressForm } from "./fulfillment-address-form";
+import { requireAdminPage } from "@/lib/admin-page-auth";
 
-export default function AdminSettingsPage() {
+export default async function AdminSettingsPage() {
+  await requireAdminPage("/admin/settings");
   return (
     <div className="space-y-8">
       <h1 className="font-serif text-3xl text-fidelis-gold tracking-wide">Settings</h1>

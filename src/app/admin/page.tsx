@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { requireAdminPage } from "@/lib/admin-page-auth";
 
 export const dynamic = "force-dynamic";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 export default async function AdminDashboardPage() {
+  await requireAdminPage("/admin");
   const [productCount, orderCount, collectionCount] = await Promise.all([
     prisma.product.count(),
     prisma.order.count(),

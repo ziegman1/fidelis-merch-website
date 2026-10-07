@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { requireAdminPage } from "@/lib/admin-page-auth";
 import { ProductForm } from "../product-form";
 
 export default async function NewProductPage() {
+  await requireAdminPage("/admin/products/new");
   const [providers, collections] = await Promise.all([
     prisma.provider.findMany({ where: { isActive: true } }),
     prisma.collection.findMany(),

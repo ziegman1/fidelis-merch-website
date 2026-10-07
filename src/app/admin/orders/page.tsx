@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { requireAdminPage } from "@/lib/admin-page-auth";
 
 export const dynamic = "force-dynamic";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,7 @@ import {
 } from "@/components/ui/table";
 
 export default async function AdminOrdersPage() {
+  await requireAdminPage("/admin/orders");
   const orders = await prisma.order.findMany({
     orderBy: { createdAt: "desc" },
     take: 50,

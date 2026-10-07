@@ -1,10 +1,12 @@
 import { prisma } from "@/lib/db";
+import { requireAdminPage } from "@/lib/admin-page-auth";
 
 export const dynamic = "force-dynamic";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
 export default async function AdminProvidersPage() {
+  await requireAdminPage("/admin/providers");
   const providers = await prisma.provider.findMany({
     include: { _count: { select: { products: true } } },
   });

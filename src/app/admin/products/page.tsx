@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { requireAdminPage } from "@/lib/admin-page-auth";
 
 export const dynamic = "force-dynamic";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import {
 } from "@/components/ui/table";
 
 export default async function AdminProductsPage() {
+  await requireAdminPage("/admin/products");
   const products = await prisma.product.findMany({
     include: {
       variants: { take: 1 },

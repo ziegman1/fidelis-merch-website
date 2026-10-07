@@ -1,9 +1,11 @@
 import { prisma } from "@/lib/db";
+import { requireAdminPage } from "@/lib/admin-page-auth";
 import { ShippingRatesForm } from "./shipping-rates-form";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminShippingPage() {
+  await requireAdminPage("/admin/shipping");
   const rates = await prisma.shippingRate.findMany({
     orderBy: { sortOrder: "asc" },
   });

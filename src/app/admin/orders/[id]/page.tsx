@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { requireAdminPage } from "@/lib/admin-page-auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -11,6 +12,7 @@ export default async function AdminOrderDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requireAdminPage("/admin/orders");
   const { id } = await params;
   const [order, defaultAddress] = await Promise.all([
     prisma.order.findUnique({
