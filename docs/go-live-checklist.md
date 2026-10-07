@@ -85,7 +85,7 @@ In Vercel: **Project → Settings → Environment Variables**. Add these for **P
   DATABASE_URL="postgresql://postgres:PASSWORD@db.PROJECT_REF.supabase.co:5432/postgres" npx tsx prisma/seed.ts
   ```
 
-  Then **change the seed admin password immediately** (seed uses `admin@fidelis.example` / `admin123`).
+  The seed does not create an admin user. Create one with `prisma/seed-admin.ts`, supplying `ADMIN_EMAIL` and a strong, unique `ADMIN_PASSWORD` via the environment (there is no default).
 
 - **Option B:** Skip seed and create an admin user another way (e.g. sign up then set `role = 'ADMIN'` in Supabase Table Editor).
 

@@ -1,21 +1,9 @@
 import { PrismaClient } from "@prisma/client";
-import { hash } from "bcryptjs";
 
 const prisma = new PrismaClient();
 
 async function main() {
-  // Admin user (password: admin123) — change in production
-  const adminPassword = await hash("admin123", 10);
-  await prisma.user.upsert({
-    where: { email: "admin@fidelis.example" },
-    create: {
-      email: "admin@fidelis.example",
-      name: "Admin",
-      passwordHash: adminPassword,
-      role: "ADMIN",
-    },
-    update: {},
-  });
+  // Admin users are not seeded; create them with prisma/seed-admin.ts.
 
   // Create Printify provider
   const printify = await prisma.provider.upsert({

@@ -53,10 +53,11 @@ npm run db:seed
 
 Seed creates:
 
-- Admin user: **admin@fidelis.example** / **admin123**
 - Printify provider
 - Featured & Apparel collections
 - Two sample products (self-fulfilled tumbler, dropship tee)
+
+The seed does not create an admin user. Create one with `prisma/seed-admin.ts`, supplying `ADMIN_EMAIL` and a strong, unique `ADMIN_PASSWORD` via the environment (there is no default).
 
 ### 4. Run dev server
 
@@ -65,7 +66,7 @@ npm run dev
 ```
 
 - **Storefront:** http://localhost:3000  
-- **Admin:** http://localhost:3000/admin (sign in with seed admin)
+- **Admin:** http://localhost:3000/admin (sign in with your admin account)
 
 ## Scripts
 

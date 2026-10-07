@@ -59,7 +59,7 @@ export function AdminLoginForm() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@fidelis.example"
+                autoComplete="username"
                 required
                 className="bg-zinc-800 border-zinc-600"
               />
@@ -79,9 +79,6 @@ export function AdminLoginForm() {
               {loading ? "Signing in…" : "Sign in"}
             </Button>
           </form>
-          <p className="mt-4 text-xs text-zinc-500">
-            Default seed: admin@fidelis.example / admin123
-          </p>
         </CardContent>
       </Card>
     </div>
