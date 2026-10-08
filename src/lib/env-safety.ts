@@ -208,26 +208,55 @@ export function assertApprovedDevelopmentDatabase(env: Env = process.env): void 
   }
 }
 
-export function isStripeSecretKeyAllowed(key: string, env: Env = process.env): boolean {
-  if (isProductionEnvironment(env)) return true;
-  return /^(sk|rk)_test_/.test(key);
+export type StripeMode = "live" | "test";
+
+/** Production uses Stripe live mode; every other environment uses test mode. No exceptions. */
+export function getRequiredStripeMode(env: Env = process.env): StripeMode {
+  return isProductionEnvironment(env) ? "live" : "test";
 }
 
-/** Returns the key unchanged when allowed; outside production only Stripe test-mode keys are accepted. */
+/** Mode of a well-formed sk_/rk_ secret key, or null when the key is malformed or unrecognized. */
+export function getStripeSecretKeyMode(key: string): StripeMode | null {
+  return (key.match(/^(?:sk|rk)_(live|test)_[A-Za-z0-9_]+$/)?.[1] as StripeMode | undefined) ?? null;
+}
+
+export function getStripePublishableKeyMode(key: string): StripeMode | null {
+  return (key.match(/^pk_(live|test)_[A-Za-z0-9_]+$/)?.[1] as StripeMode | undefined) ?? null;
+}
+
+export function isStripeSecretKeyAllowed(key: string, env: Env = process.env): boolean {
+  return getStripeSecretKeyMode(key) === getRequiredStripeMode(env);
+}
+
+function describeKeyMode(mode: StripeMode | null): string {
+  return mode ? `a ${mode.toUpperCase()}-mode Stripe key` : "an unrecognized Stripe key";
+}
+
+/** Returns the key unchanged when its mode matches the environment: live in production, test elsewhere. */
 export function assertStripeSecretKeyAllowed(key: string, env: Env = process.env): string {
   if (isStripeSecretKeyAllowed(key, env)) return key;
-  const environment = getDeploymentEnvironment(env);
-  const kind = /^(sk|rk)_live_/.test(stripQuotes(key)) ? "a LIVE-mode Stripe key" : "an unrecognized Stripe key";
+  const required = getRequiredStripeMode(env);
   throw new EnvironmentSafetyError(
-    `STRIPE_SECRET_KEY is ${kind} in the "${environment}" environment; only sk_test_/rk_test_ keys are allowed outside production.`
+    `STRIPE_SECRET_KEY is ${describeKeyMode(getStripeSecretKeyMode(stripQuotes(key)))} in the "${getDeploymentEnvironment(env)}" ` +
+      `environment; only sk_${required}_/rk_${required}_ keys are allowed here.`
   );
 }
 
 export function assertStripePublishableKeyAllowed(key: string, env: Env = process.env): string {
-  if (isProductionEnvironment(env) || /^pk_test_/.test(key)) return key;
+  const required = getRequiredStripeMode(env);
+  if (getStripePublishableKeyMode(key) === required) return key;
   throw new EnvironmentSafetyError(
-    `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is not a pk_test_ key in the "${getDeploymentEnvironment(env)}" environment.`
+    `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is ${describeKeyMode(getStripePublishableKeyMode(stripQuotes(key)))} in the ` +
+      `"${getDeploymentEnvironment(env)}" environment; only pk_${required}_ keys are allowed here.`
   );
+}
+
+/**
+ * Whether a Stripe object's `livemode` (event or Checkout Session) matches this
+ * environment. Anything other than the exact expected boolean is refused.
+ */
+export function isStripeLivemodeAllowed(livemode: unknown, env: Env = process.env): boolean {
+  return livemode === (getRequiredStripeMode(env) === "live");
 }
 
 /** Printify order creation/mutation is production-only, with no override. */

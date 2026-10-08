@@ -15,7 +15,12 @@ import {
   getDatabaseIdentity,
   getDeploymentEnvironment,
   getEmailDeliveryMode,
+  getRequiredStripeMode,
+  getStripePublishableKeyMode,
+  getStripeSecretKeyMode,
   isPrintifyReadAllowed,
+  isStripeLivemodeAllowed,
+  isStripeSecretKeyAllowed,
   PRODUCTION_BLOB_STORE_FINGERPRINTS,
   PRODUCTION_DATABASE_FINGERPRINTS,
   resetProductionOperatorModeForTests,
@@ -181,28 +186,117 @@ describe("approved development database allowlist", () => {
 
 describe("Stripe guard", () => {
   const LIVE = "sk_live_dummy_not_real";
-  it.each([
+  const NON_PRODUCTION = [
     ["development", DEVELOPMENT],
     ["preview", PREVIEW],
     ["test", TEST],
-  ])("%s cannot use a Stripe live key", (_label, env) => {
+  ] as const;
+  const MALFORMED = [
+    "garbage",
+    "",
+    "sk_test_",
+    "sk_live_",
+    "pk_test_dummy",
+    "sk_prod_dummy",
+    "SK_TEST_dummy",
+    " sk_test_dummy",
+    "sk_test_dummy ",
+    "sk_test_dummy\n",
+    '"sk_test_dummy"',
+    "sk_test_dummy:extra",
+    "xsk_test_dummy",
+  ];
+
+  it.each(NON_PRODUCTION)("%s accepts sk_test_ and rk_test_ secret keys", (_label, env) => {
+    expect(assertStripeSecretKeyAllowed("sk_test_dummy", env)).toBe("sk_test_dummy");
+    expect(assertStripeSecretKeyAllowed("rk_test_dummy", env)).toBe("rk_test_dummy");
+    expect(isStripeSecretKeyAllowed("sk_test_dummy", env)).toBe(true);
+  });
+
+  it.each(NON_PRODUCTION)("%s refuses sk_live_ and rk_live_ secret keys", (_label, env) => {
     expect(() => assertStripeSecretKeyAllowed(LIVE, env)).toThrow(/LIVE-mode/);
     expect(() => assertStripeSecretKeyAllowed("rk_live_dummy", env)).toThrow(/LIVE-mode/);
-    expect(() => assertStripePublishableKeyAllowed("pk_live_dummy", env)).toThrow(EnvironmentSafetyError);
+    expect(isStripeSecretKeyAllowed(LIVE, env)).toBe(false);
   });
 
-  it("refuses unrecognized key formats outside production", () => {
-    expect(() => assertStripeSecretKeyAllowed("garbage", DEVELOPMENT)).toThrow(/unrecognized/);
-  });
-
-  it("allows test keys outside production", () => {
-    expect(assertStripeSecretKeyAllowed("sk_test_dummy", DEVELOPMENT)).toBe("sk_test_dummy");
-    expect(assertStripePublishableKeyAllowed("pk_test_dummy", PREVIEW)).toBe("pk_test_dummy");
-  });
-
-  it("permits a live key in production", () => {
+  it("production accepts sk_live_ and rk_live_ secret keys", () => {
     expect(assertStripeSecretKeyAllowed(LIVE, PRODUCTION)).toBe(LIVE);
+    expect(assertStripeSecretKeyAllowed("rk_live_dummy", PRODUCTION)).toBe("rk_live_dummy");
+    expect(isStripeSecretKeyAllowed(LIVE, PRODUCTION)).toBe(true);
+  });
+
+  it("production refuses sk_test_ and rk_test_ secret keys", () => {
+    expect(() => assertStripeSecretKeyAllowed("sk_test_dummy", PRODUCTION)).toThrow(/TEST-mode.*sk_live_\/rk_live_/);
+    expect(() => assertStripeSecretKeyAllowed("rk_test_dummy", PRODUCTION)).toThrow(/TEST-mode/);
+    expect(isStripeSecretKeyAllowed("sk_test_dummy", PRODUCTION)).toBe(false);
+  });
+
+  it("production operator mode requires live keys too", () => {
+    enableProductionOperatorMode("op", ["--production"], { FIDELIS_PRODUCTION_OPERATOR: "op" });
+    expect(isStripeSecretKeyAllowed(LIVE, {})).toBe(true);
+    expect(isStripeSecretKeyAllowed("sk_test_dummy", {})).toBe(false);
+  });
+
+  it.each([...NON_PRODUCTION, ["production", PRODUCTION] as const])("%s refuses malformed secret keys", (_label, env) => {
+    for (const key of MALFORMED) {
+      expect(isStripeSecretKeyAllowed(key, env)).toBe(false);
+      expect(() => assertStripeSecretKeyAllowed(key, env)).toThrow(EnvironmentSafetyError);
+    }
+    expect(() => assertStripeSecretKeyAllowed("garbage", env)).toThrow(/unrecognized/);
+  });
+
+  it("classifies key modes", () => {
+    expect(getStripeSecretKeyMode("sk_live_abc")).toBe("live");
+    expect(getStripeSecretKeyMode("rk_test_abc")).toBe("test");
+    expect(getStripeSecretKeyMode("pk_live_abc")).toBeNull();
+    expect(getStripePublishableKeyMode("pk_test_abc")).toBe("test");
+    expect(getStripePublishableKeyMode("sk_live_abc")).toBeNull();
+    expect(getRequiredStripeMode(PRODUCTION)).toBe("live");
+    for (const [, env] of NON_PRODUCTION) expect(getRequiredStripeMode(env)).toBe("test");
+    expect(getRequiredStripeMode(LOCAL_BUILD)).toBe("test");
+  });
+
+  it.each([
+    ["development", DEVELOPMENT],
+    ["preview", PREVIEW],
+  ] as const)("%s accepts pk_test_ and refuses pk_live_ publishable keys", (_label, env) => {
+    expect(assertStripePublishableKeyAllowed("pk_test_dummy", env)).toBe("pk_test_dummy");
+    expect(() => assertStripePublishableKeyAllowed("pk_live_dummy", env)).toThrow(/LIVE-mode.*pk_test_/);
+  });
+
+  it("production accepts pk_live_ and refuses pk_test_ publishable keys", () => {
     expect(assertStripePublishableKeyAllowed("pk_live_dummy", PRODUCTION)).toBe("pk_live_dummy");
+    expect(() => assertStripePublishableKeyAllowed("pk_test_dummy", PRODUCTION)).toThrow(/TEST-mode.*pk_live_/);
+  });
+
+  it.each([...NON_PRODUCTION, ["production", PRODUCTION] as const])("%s refuses malformed publishable keys", (_label, env) => {
+    for (const key of ["garbage", "", "pk_test_", "pk_live_", "sk_test_dummy", " pk_test_dummy", "pk_live_dummy\n"]) {
+      expect(() => assertStripePublishableKeyAllowed(key, env)).toThrow(EnvironmentSafetyError);
+    }
+  });
+
+  it("livemode must be exactly true in production and exactly false elsewhere", () => {
+    expect(isStripeLivemodeAllowed(true, PRODUCTION)).toBe(true);
+    expect(isStripeLivemodeAllowed(false, PRODUCTION)).toBe(false);
+    for (const [, env] of NON_PRODUCTION) {
+      expect(isStripeLivemodeAllowed(false, env)).toBe(true);
+      expect(isStripeLivemodeAllowed(true, env)).toBe(false);
+    }
+    for (const env of [PRODUCTION, DEVELOPMENT]) {
+      for (const bad of [undefined, null, "true", "false", 1, 0]) expect(isStripeLivemodeAllowed(bad, env)).toBe(false);
+    }
+  });
+
+  it("startup check refuses wrong-mode keys outside production", () => {
+    expect(() =>
+      assertSafeNonProductionStartup({ ...DEVELOPMENT, DATABASE_URL: DEV_URL, NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "pk_live_dummy" })
+    ).toThrow(/pk_test_/);
+    expect(() =>
+      assertSafeNonProductionStartup({ ...DEVELOPMENT, DATABASE_URL: DEV_URL, STRIPE_SECRET_KEY: "garbage" })
+    ).toThrow(/unrecognized/);
+    expect(() =>
+      assertSafeNonProductionStartup({ ...DEVELOPMENT, DATABASE_URL: DEV_URL, STRIPE_SECRET_KEY: "sk_test_dummy", NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "pk_test_dummy" })
+    ).not.toThrow();
   });
 
   it("startup check refuses live keys outside production", () => {

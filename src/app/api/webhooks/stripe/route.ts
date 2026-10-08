@@ -9,7 +9,7 @@ import Stripe from "stripe";
 import { createOrderFromSession } from "@/lib/orders";
 import { LEGAL_CONFIG } from "@/data/legal-config";
 import { getTransactionalEmailSender } from "@/lib/email";
-import { isStripeSecretKeyAllowed } from "@/lib/env-safety";
+import { getDeploymentEnvironment, isStripeLivemodeAllowed, isStripeSecretKeyAllowed } from "@/lib/env-safety";
 
 function escapeHtml(s: string): string {
   return s
@@ -34,7 +34,7 @@ export async function POST(req: Request) {
   }
 
   if (!isStripeSecretKeyAllowed(stripeKey)) {
-    console.error("[Stripe webhook] STRIPE_SECRET_KEY is not allowed in this environment (live keys are production-only)");
+    console.error("[Stripe webhook] STRIPE_SECRET_KEY is not allowed in this environment (live keys only in production, test keys everywhere else)");
     return NextResponse.json(
       { error: "Webhook not configured" },
       { status: 500 }
@@ -66,6 +66,17 @@ export async function POST(req: Request) {
     // Common cause: STRIPE_WEBHOOK_SECRET must match the endpoint in Stripe Dashboard.
     // If using stripe listen locally, use the CLI secret; for production, use the Dashboard secret.
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+  }
+
+  // Non-2xx so Stripe never records a cross-environment event as delivered.
+  if (!isStripeLivemodeAllowed(event.livemode)) {
+    console.error("[Stripe webhook] Refused event from the wrong Stripe mode:", {
+      eventId: event.id,
+      type: event.type,
+      livemode: String(event.livemode),
+      environment: getDeploymentEnvironment(),
+    });
+    return NextResponse.json({ error: "Event mode does not match this environment" }, { status: 400 });
   }
 
   if (event.type === "checkout.session.completed") {

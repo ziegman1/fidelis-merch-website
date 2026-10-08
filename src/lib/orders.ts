@@ -1,7 +1,7 @@
 import Stripe from "stripe";
 import { prisma } from "@/lib/db";
 import { routeFulfillment } from "@/lib/fulfillment";
-import { assertStripeSecretKeyAllowed } from "@/lib/env-safety";
+import { assertStripeSecretKeyAllowed, getDeploymentEnvironment, isStripeLivemodeAllowed } from "@/lib/env-safety";
 
 export const CHECKOUT_LIMITS = {
   maxLines: 20,
@@ -146,6 +146,12 @@ export async function createOrderFromSession(stripeSessionId: string) {
 
   const stripe = new Stripe(assertStripeSecretKeyAllowed(stripeKey));
   const session = await stripe.checkout.sessions.retrieve(stripeSessionId);
+  if (!isStripeLivemodeAllowed(session.livemode)) {
+    failClosed(stripeSessionId, "STRIPE_MODE_MISMATCH", {
+      livemode: String(session.livemode),
+      environment: getDeploymentEnvironment(),
+    });
+  }
   if (!session.payment_status || session.payment_status !== "paid") {
     throw new Error("Session not paid");
   }

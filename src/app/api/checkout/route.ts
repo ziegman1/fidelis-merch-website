@@ -208,7 +208,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Stripe not configured" }, { status: 500 });
     }
     if (!isStripeSecretKeyAllowed(stripeKey)) {
-      console.error("[Checkout] STRIPE_SECRET_KEY is not allowed in this environment (live keys are production-only)");
+      console.error("[Checkout] STRIPE_SECRET_KEY is not allowed in this environment (live keys only in production, test keys everywhere else)");
       return NextResponse.json({ error: "Stripe not configured" }, { status: 500 });
     }
 

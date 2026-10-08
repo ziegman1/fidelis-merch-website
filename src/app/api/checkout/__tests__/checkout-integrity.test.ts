@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 type Fixture = Record<string, unknown> & { id: string; productId: string; priceCents: number; product: Record<string, unknown> };
 
@@ -146,9 +146,94 @@ beforeEach(() => {
   h.variants = [A(), B()];
   h.pending = null;
   h.existingOrder = null;
-  h.session = { id: "cs_test_fixture_session", payment_status: "paid", currency: "usd", payment_intent: "pi_fixture", customer_details: { email: "buyer@example.invalid" }, shipping_details: null };
+  h.session = { id: "cs_test_fixture_session", livemode: false, payment_status: "paid", currency: "usd", payment_intent: "pi_fixture", customer_details: { email: "buyer@example.invalid" }, shipping_details: null };
   h.lineItems = { data: [], has_more: false };
   process.env.STRIPE_SECRET_KEY = "sk_test_fixture_not_real";
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+/** Classifies the process as a real production deployment (Vitest otherwise always means "test"). */
+function stubProduction(stripeSecretKey: string) {
+  vi.stubEnv("VITEST", "");
+  vi.stubEnv("NODE_ENV", "production");
+  vi.stubEnv("VERCEL_ENV", "production");
+  vi.stubEnv("STRIPE_SECRET_KEY", stripeSecretKey);
+}
+
+describe("Stripe environment mode", () => {
+  const valid = { productId: "pA", variantId: "vA", quantity: 1 };
+
+  it.each([
+    ["a live secret key outside production", () => vi.stubEnv("STRIPE_SECRET_KEY", "sk_live_fixture_not_real")],
+    ["a live restricted key outside production", () => vi.stubEnv("STRIPE_SECRET_KEY", "rk_live_fixture_not_real")],
+    ["a test secret key in production", () => stubProduction("sk_test_fixture_not_real")],
+    ["a malformed key", () => vi.stubEnv("STRIPE_SECRET_KEY", "not-a-stripe-key")],
+  ])("checkout refuses %s before contacting Stripe", async (_label, configure) => {
+    configure();
+    const { status, body } = await runCheckout([valid]);
+    expect(status).toBe(500);
+    expect(body.error).toBe("Stripe not configured");
+    expect(stripeCreate).not.toHaveBeenCalled();
+    expect(pendingUpsert).not.toHaveBeenCalled();
+    expect(h.events.some((e) => e.startsWith("stripe."))).toBe(false);
+  });
+
+  it("checkout with a live key in production reaches Stripe", async () => {
+    stubProduction("sk_live_fixture_not_real");
+    const { status } = await runCheckout([valid]);
+    expect(status).toBe(200);
+    expect(stripeCreate).toHaveBeenCalledTimes(1);
+  });
+
+  async function expectModeRefusal() {
+    storePending([trustedLine(A(), 1)]);
+    h.lineItems = { data: [stripeLine("Product pA", 2500, 1), stripeLine("Shipping", 599, 1)], has_more: false };
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    const err = await createOrderFromSession("cs_test_fixture_session").catch((e) => e);
+    expect(err).toBeInstanceOf(OrderIntegrityError);
+    expect((err as OrderIntegrityError).reason).toBe("STRIPE_MODE_MISMATCH");
+    expect(h.events).toEqual(["stripe.sessions.retrieve"]);
+    expect(orderCreate).not.toHaveBeenCalled();
+    expect(pendingDelete).not.toHaveBeenCalled();
+    expect(routeFulfillment).not.toHaveBeenCalled();
+    expect(stripeListLineItems).not.toHaveBeenCalled();
+    expect(JSON.stringify(errorLog.mock.calls)).not.toMatch(/buyer@example\.invalid|cs_test_fixture_session/);
+    errorLog.mockRestore();
+  }
+
+  it("non-production refuses a live-mode session with no side effects", async () => {
+    h.session.livemode = true;
+    await expectModeRefusal();
+  });
+
+  it("production refuses a test-mode session with no side effects", async () => {
+    stubProduction("sk_live_fixture_not_real");
+    h.session.livemode = false;
+    await expectModeRefusal();
+  });
+
+  it("a session without a boolean livemode is refused", async () => {
+    delete h.session.livemode;
+    await expectModeRefusal();
+  });
+
+  it("an existing order is not returned for a wrong-mode session", async () => {
+    h.existingOrder = { id: "order_existing", items: [] };
+    h.session.livemode = true;
+    await expectModeRefusal();
+  });
+
+  it("production processes a live-mode session", async () => {
+    stubProduction("sk_live_fixture_not_real");
+    h.session.livemode = true;
+    storePending([trustedLine(A(), 1)]);
+    h.lineItems = { data: [stripeLine("Product pA", 2500, 1), stripeLine("Shipping", 599, 1)], has_more: false };
+    await expect(createOrderFromSession("cs_test_fixture_session")).resolves.toMatchObject({ totalCents: 2500 });
+    expect(routeFulfillment).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("checkout rejects the whole cart when any line is invalid (no Stripe session is created)", () => {
