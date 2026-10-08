@@ -143,7 +143,7 @@ describe("Stripe live keys are refused outside production", () => {
 });
 
 describe("the Prisma client refuses the production database outside production", () => {
-  it("db.ts throws on import when DATABASE_URL is a production database", async () => {
+  it("db.ts refuses on first use when DATABASE_URL is a production database", async () => {
     vi.resetModules();
     const envSafety = await import("@/lib/env-safety");
     const fake = createHash("sha256").update("supabase:zyxwvutsrqponmlkjihg").digest("hex");
@@ -153,7 +153,9 @@ describe("the Prisma client refuses the production database outside production",
     const cached = g.prisma;
     delete g.prisma;
     try {
-      await expect(import("@/lib/db")).rejects.toThrow(/PRODUCTION database/);
+      const { prisma } = await import("@/lib/db");
+      expect(() => prisma.order).toThrow(/PRODUCTION database/);
+      expect(g.prisma).toBeUndefined();
     } finally {
       (envSafety.PRODUCTION_DATABASE_FINGERPRINTS as Set<string>).delete(fake);
       if (cached !== undefined) g.prisma = cached;
