@@ -36,6 +36,15 @@ export const PRODUCTION_DATABASE_FINGERPRINTS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * SHA-256 of `supabase:<project-ref>` for databases positively approved for
+ * development-only tooling (e.g. the synthetic seed). Hashes only, as above.
+ */
+export const DEVELOPMENT_DATABASE_FINGERPRINTS: ReadonlySet<string> = new Set([
+  // fidelis-merch-dev
+  "a7979765f6ea614874d4ddde2ee04e4fa7f14c95de6c9d19d01f18b19e31c796",
+]);
+
+/**
  * SHA-256 of `vercel-blob-store:<store-id>` for Blob stores that must never be
  * written outside production: the current production store and a second store
  * found in a Vercel-pulled env file whose ownership is unconfirmed.
@@ -174,6 +183,27 @@ export function assertDatabaseAllowed(env: Env = process.env): void {
         `${key} points at the PRODUCTION database in the "${environment}" environment; refusing to connect. ` +
           "Use a separate development/test database."
       );
+    }
+  }
+}
+
+/**
+ * For development-only tools that write data. On top of assertDatabaseAllowed,
+ * requires the "development" environment and every configured database URL to
+ * positively match DEVELOPMENT_DATABASE_FINGERPRINTS.
+ */
+export function assertApprovedDevelopmentDatabase(env: Env = process.env): void {
+  const environment = getDeploymentEnvironment(env);
+  if (environment !== "development") {
+    throw new EnvironmentSafetyError(`This command only runs in the "development" environment, not "${environment}".`);
+  }
+  assertDatabaseAllowed(env);
+  for (const key of DATABASE_URL_KEYS) {
+    const value = env[key];
+    if (!value?.trim()) continue;
+    const fingerprint = getDatabaseFingerprint(value);
+    if (!fingerprint || !DEVELOPMENT_DATABASE_FINGERPRINTS.has(fingerprint)) {
+      throw new EnvironmentSafetyError(`${key} is not an approved development database; refusing.`);
     }
   }
 }

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  assertApprovedDevelopmentDatabase,
   assertBlobWriteAllowed,
   assertDatabaseAllowed,
   assertPrintifyReadAllowed,
@@ -8,6 +9,7 @@ import {
   assertSafeNonProductionStartup,
   assertStripePublishableKeyAllowed,
   assertStripeSecretKeyAllowed,
+  DEVELOPMENT_DATABASE_FINGERPRINTS,
   enableProductionOperatorMode,
   EnvironmentSafetyError,
   getDatabaseIdentity,
@@ -128,6 +130,52 @@ describe("database guard", () => {
 
   it("permits the production database in production", () => {
     expect(() => assertDatabaseAllowed({ ...PRODUCTION, DATABASE_URL: PROD_POOLER_URL, DIRECT_URL: PROD_DIRECT_URL })).not.toThrow();
+  });
+});
+
+describe("approved development database allowlist", () => {
+  const FAKE_DEV_REF = "devdevdevdevdevdevdv";
+  const FAKE_DEV_FINGERPRINT = sha(`supabase:${FAKE_DEV_REF}`);
+  const APPROVED_POOLER_URL = `postgresql://postgres.${FAKE_DEV_REF}:pw@aws-0-us-east-1.pooler.supabase.com:6543/postgres`;
+  const APPROVED_DIRECT_URL = `postgresql://postgres:pw@db.${FAKE_DEV_REF}.supabase.co:5432/postgres`;
+  const APPROVED = { ...DEVELOPMENT, DATABASE_URL: APPROVED_POOLER_URL, DIRECT_URL: APPROVED_DIRECT_URL };
+
+  beforeEach(() => (DEVELOPMENT_DATABASE_FINGERPRINTS as Set<string>).add(FAKE_DEV_FINGERPRINT));
+  afterEach(() => (DEVELOPMENT_DATABASE_FINGERPRINTS as Set<string>).delete(FAKE_DEV_FINGERPRINT));
+
+  it("registers only the verified fidelis-merch-dev fingerprint, never a production one", () => {
+    (DEVELOPMENT_DATABASE_FINGERPRINTS as Set<string>).delete(FAKE_DEV_FINGERPRINT);
+    expect([...DEVELOPMENT_DATABASE_FINGERPRINTS]).toEqual(["a7979765f6ea614874d4ddde2ee04e4fa7f14c95de6c9d19d01f18b19e31c796"]);
+    for (const fp of DEVELOPMENT_DATABASE_FINGERPRINTS) expect(PRODUCTION_DATABASE_FINGERPRINTS.has(fp)).toBe(false);
+  });
+
+  it("permits an allowlisted database in development", () => {
+    expect(() => assertApprovedDevelopmentDatabase(APPROVED)).not.toThrow();
+  });
+
+  it("refuses an identifiable but non-allowlisted development database", () => {
+    expect(() => assertApprovedDevelopmentDatabase({ ...DEVELOPMENT, DATABASE_URL: DEV_URL, DIRECT_URL: DEV_URL })).toThrow(
+      /DATABASE_URL is not an approved development database/
+    );
+    expect(() => assertApprovedDevelopmentDatabase({ ...APPROVED, POSTGRES_URL: DEV_URL })).toThrow(/POSTGRES_URL is not an approved/);
+  });
+
+  it("refuses production, unidentifiable and missing databases", () => {
+    expect(() => assertApprovedDevelopmentDatabase({ ...DEVELOPMENT, DATABASE_URL: PROD_POOLER_URL })).toThrow(/PRODUCTION database/);
+    expect(() => assertApprovedDevelopmentDatabase({ ...APPROVED, DIRECT_URL: PROD_DIRECT_URL })).toThrow(/PRODUCTION database/);
+    expect(() => assertApprovedDevelopmentDatabase({ ...DEVELOPMENT, DATABASE_URL: "garbage" })).toThrow(/cannot be identified/);
+    expect(() => assertApprovedDevelopmentDatabase(DEVELOPMENT)).toThrow(/DATABASE_URL is not set/);
+  });
+
+  it("refuses every environment other than development, even with an allowlisted database", () => {
+    for (const base of [PREVIEW, TEST, PRODUCTION, { VITEST: "true" }]) {
+      expect(() => assertApprovedDevelopmentDatabase({ ...base, DATABASE_URL: APPROVED_POOLER_URL })).toThrow(/only runs in the "development"/);
+    }
+  });
+
+  it("is refused in production operator mode", () => {
+    enableProductionOperatorMode("seed-development", ["--production"], { FIDELIS_PRODUCTION_OPERATOR: "seed-development" });
+    expect(() => assertApprovedDevelopmentDatabase(APPROVED)).toThrow(/not "production"/);
   });
 });
 

@@ -164,10 +164,11 @@ describe("production platform and the production migration operator flow", () =>
 });
 
 describe("prisma.config.ts wiring", () => {
-  it("runs the guard on load and defines the seed command", () => {
+  it("runs the guard on load and defines no automatic seed hook", () => {
     const source = readFileSync(resolve(root, "prisma.config.ts"), "utf8");
     expect(source).toMatch(/^guardPrismaCli\(\);$/m);
-    expect(source).toContain('seed: "tsx prisma/seed.ts"');
+    expect(source).not.toMatch(/\bmigrations\s*:\s*\{/);
+    expect(source).not.toMatch(/\bseed\s*:\s*["'`]/);
   });
 
   it("package.json no longer carries the ignored prisma seed block", () => {
